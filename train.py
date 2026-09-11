@@ -13,14 +13,14 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecMonitor
 
 
-def make_env(num_agents: int, max_cycles: int, num_vec_envs: int):
+def make_env(num_agents: int, max_cycles: int, num_vec_envs: int, monitor_file: str = None):
     env = simple_spread_v3.parallel_env(
         N=num_agents, local_ratio=0.5, max_cycles=max_cycles, continuous_actions=False
     )
     env = ss.pad_observations_v0(env)
     env = ss.pettingzoo_env_to_vec_env_v1(env)
     env = ss.concat_vec_envs_v1(env, num_vec_envs=num_vec_envs, num_cpus=1, base_class="stable_baselines3")
-    return VecMonitor(env)
+    return VecMonitor(env, filename=monitor_file)
 
 
 def main():
@@ -30,10 +30,14 @@ def main():
     parser.add_argument("--max-cycles", type=int, default=25)
     parser.add_argument("--num-vec-envs", type=int, default=4)
     parser.add_argument("--out", default="models/simple_spread_ppo")
+    parser.add_argument("--tensorboard-log", default=None, help="Directory for TensorBoard logs, e.g. runs/")
+    parser.add_argument("--monitor-log", default="logs/monitor.csv", help="CSV path for per-episode reward logging")
     args = parser.parse_args()
 
-    env = make_env(args.num_agents, args.max_cycles, args.num_vec_envs)
-    model = PPO("MlpPolicy", env, verbose=1)
+    if args.monitor_log:
+        os.makedirs(os.path.dirname(args.monitor_log), exist_ok=True)
+    env = make_env(args.num_agents, args.max_cycles, args.num_vec_envs, monitor_file=args.monitor_log)
+    model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=args.tensorboard_log)
     model.learn(total_timesteps=args.timesteps)
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)

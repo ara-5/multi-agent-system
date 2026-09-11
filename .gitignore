@@ -3,4 +3,6 @@ __pycache__/
 *.pyc
 models/
 *.zip
+logs/
+runs/
 .DS_Store

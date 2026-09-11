@@ -3,3 +3,7 @@ mpe2
 supersuit>=3.9
 stable-baselines3>=2.3
 torch>=2.2
+matplotlib>=3.8
+pandas>=2.2
+imageio>=2.34
+tensorboard>=2.16
