@@ -27,7 +27,7 @@ def main():
     env.reset()
     frames = [env.render()]
     for agent in env.agent_iter():
-        obs, reward, terminated, truncated, info = env.last()
+        obs, _reward, terminated, truncated, _info = env.last()
         if terminated or truncated:
             action = None
         elif model is not None:

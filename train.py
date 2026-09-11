@@ -13,7 +13,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecMonitor
 
 
-def make_env(num_agents: int, max_cycles: int, num_vec_envs: int, monitor_file: str = None):
+def make_env(num_agents: int, max_cycles: int, num_vec_envs: int, monitor_file: str | None = None):
     env = simple_spread_v3.parallel_env(
         N=num_agents, local_ratio=0.5, max_cycles=max_cycles, continuous_actions=False
     )
@@ -32,17 +32,33 @@ def main():
     parser.add_argument("--out", default="models/simple_spread_ppo")
     parser.add_argument("--tensorboard-log", default=None, help="Directory for TensorBoard logs, e.g. runs/")
     parser.add_argument("--monitor-log", default="logs/monitor.csv", help="CSV path for per-episode reward logging")
+    parser.add_argument("--wandb", action="store_true", help="Log this run to Weights & Biases (requires `wandb login` first)")
+    parser.add_argument("--wandb-project", default="multi-agent-system")
     args = parser.parse_args()
 
     if args.monitor_log:
         os.makedirs(os.path.dirname(args.monitor_log), exist_ok=True)
+
+    run = None
+    callback = None
+    if args.wandb:
+        import wandb
+        from wandb.integration.sb3 import WandbCallback
+
+        args.tensorboard_log = args.tensorboard_log or "runs"
+        run = wandb.init(project=args.wandb_project, config=vars(args), sync_tensorboard=True)
+        callback = WandbCallback(verbose=2)
+
     env = make_env(args.num_agents, args.max_cycles, args.num_vec_envs, monitor_file=args.monitor_log)
     model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=args.tensorboard_log)
-    model.learn(total_timesteps=args.timesteps)
+    model.learn(total_timesteps=args.timesteps, callback=callback)
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     model.save(args.out)
     print(f"Saved model to {args.out}.zip")
+
+    if run is not None:
+        run.finish()
 
 
 if __name__ == "__main__":

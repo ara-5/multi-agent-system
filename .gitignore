@@ -5,4 +5,6 @@ models/
 *.zip
 logs/
 runs/
+*.egg-info/
+.pytest_cache/
 .DS_Store

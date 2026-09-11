@@ -10,6 +10,7 @@ def main():
     parser.add_argument("--log", default="logs/monitor.csv")
     parser.add_argument("--out", default="assets/reward_curve.png")
     parser.add_argument("--window", type=int, default=50, help="Rolling-average window size")
+    parser.add_argument("--title", default="PPO training reward")
     args = parser.parse_args()
 
     df = pd.read_csv(args.log, skiprows=1)  # first row is a SB3 metadata comment
@@ -21,7 +22,7 @@ def main():
     plt.plot(df["episode"], df["rolling_reward"], label=f"{args.window}-episode rolling mean")
     plt.xlabel("Episode")
     plt.ylabel("Total reward")
-    plt.title("PPO training reward on simple_spread")
+    plt.title(args.title)
     plt.legend()
     plt.tight_layout()
     plt.savefig(args.out, dpi=120)

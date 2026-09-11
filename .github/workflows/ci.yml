@@ -17,10 +17,25 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -e ".[dev]"
 
-      - name: Train (tiny smoke test)
+      - name: Lint
+        run: ruff check .
+
+      - name: Unit tests
+        run: pytest tests/ -v
+
+      - name: Train simple_spread (tiny smoke test)
         run: python train.py --timesteps 4000 --num-vec-envs 2 --out models/ci_smoke_test
 
-      - name: Evaluate
+      - name: Evaluate simple_spread
         run: python evaluate.py --model models/ci_smoke_test --episodes 1
+
+      - name: Train simple_tag adversary (tiny smoke test)
+        run: python train_tag.py --role adversary --timesteps 3000 --num-vec-envs 2 --out models/ci_tag_adv
+
+      - name: Train simple_tag good vs. trained adversary (tiny smoke test)
+        run: python train_tag.py --role good --opponent-model models/ci_tag_adv --timesteps 3000 --num-vec-envs 2 --out models/ci_tag_good
+
+      - name: Evaluate simple_tag
+        run: python evaluate_tag.py --adversary-model models/ci_tag_adv --good-model models/ci_tag_good --episodes 1

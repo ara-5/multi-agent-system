@@ -1,0 +1,34 @@
+[project]
+name = "multi-agent-system"
+version = "0.1.0"
+description = "Multi-agent reinforcement learning scaffold: PettingZoo + SuperSuit + Stable-Baselines3"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pettingzoo>=1.24",
+    "mpe2",
+    "supersuit>=3.9",
+    "stable-baselines3>=2.3",
+    "torch>=2.2",
+    "matplotlib>=3.8",
+    "pandas>=2.2",
+    "imageio>=2.34",
+    "tensorboard>=2.16",
+]
+
+[project.optional-dependencies]
+wandb = ["wandb>=0.17"]
+dev = ["ruff>=0.6", "pytest>=8"]
+
+[tool.ruff]
+line-length = 110
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = [
+    "train", "evaluate", "plot_rewards", "record_demo",
+    "train_tag", "evaluate_tag", "record_demo_tag", "opponent_wrapper",
+]
