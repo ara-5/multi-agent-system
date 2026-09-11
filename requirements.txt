@@ -1,0 +1,5 @@
+pettingzoo>=1.24
+mpe2
+supersuit>=3.9
+stable-baselines3>=2.3
+torch>=2.2
