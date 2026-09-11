@@ -19,6 +19,12 @@ rules.
   The two roles have different observation spaces and opposing rewards, so
   parameter sharing doesn't apply; see [Independent policies](#independent-policies-simple_tag)
   below for how this repo trains genuinely separate per-role policies.
+- **`simple_speaker_listener`** (cooperative, emergent communication) — a speaker
+  that can see the target landmark but can't move, and a listener that can move
+  but can't see the target; they share one reward, so they need a communication
+  protocol to succeed. Trained as a single joint policy (see
+  [joint_env.py](#emergent-communication-simple_speaker_listener) below) — and,
+  spoiler, it mostly didn't work; see the honest results below.
 
 ## Demo: simple_spread (cooperative)
 
@@ -57,6 +63,32 @@ opponent: the trained adversary nearly 3x's random-adversary reward (28.5-33 vs.
 either catch prey (discrete +10/-10 collision reward) or don't in a given 25-step
 episode, so per-episode reward is closer to a coin flip than a smooth signal;
 that's why the table reports 20-episode means rather than a single run.
+
+## Demo: simple_speaker_listener (emergent communication)
+
+| Random policy (untrained) | Joint PPO policy (200k timesteps) |
+| --- | --- |
+| ![random policy](assets/demo_comm_random.gif) | ![trained policy](assets/demo_comm.gif) |
+
+![reward curve](assets/comm_reward_curve.png)
+
+Reward (shared, negative listener-to-target distance) improves substantially,
+from roughly -38 to -15 over training. That alone would normally read as "the
+agents learned to communicate" — but it doesn't hold up:
+
+![message vs. target confusion matrix](assets/comm_confusion_matrix.png)
+
+**Mutual information between the true target and the speaker's message is 0.0148
+bits — 0.9% of the 1.585-bit maximum.** In other words, the message is carrying
+essentially no information about the target; the listener isn't decoding a
+protocol, it's most likely converged on a generically useful policy (e.g. moving
+toward the landmarks' centroid, which beats undirected random movement on
+average without needing to know *which* landmark is correct). This is a known
+failure mode in emergent-communication RL: nothing in the setup forces the
+communication channel specifically to be used, so PPO is free to find any
+reward-improving policy, and a channel-agnostic one is often easier to discover
+than a true protocol. See [Design notes](#emergent-communication-design-notes)
+for what would likely fix this.
 
 ## Setup
 
@@ -111,19 +143,44 @@ This is **not** true simultaneous self-play (both sides improving together, whic
 would need a multi-policy trainer like RLlib) — it's a simpler two-stage
 alternative that still produces genuinely independent, role-specific policies.
 
+## Train: simple_speaker_listener <a name="emergent-communication-simple_speaker_listener"></a>
+
+Unlike `simple_tag`, this task is fully cooperative with one shared reward — so
+unlike the freeze-one-side approach above, freezing either agent here breaks
+learning entirely (a frozen random speaker sends a message uncorrelated with the
+target, so there's nothing for the listener to learn to decode). Instead,
+`joint_env.py`'s `JointPolicyEnv` flattens both agents into a single
+`gymnasium.Env`: one PPO policy sees both agents' observations concatenated and
+outputs both agents' actions at once (a `MultiDiscrete` joint action space),
+so the two roles are trained simultaneously by construction.
+
+```bash
+python train_comm.py --timesteps 200000 --out models/comm_joint_ppo
+```
+
+This is centralized training *and* centralized execution (one policy needs both
+agents' observations at inference time too) — a real limitation compared to
+decentralized execution, but a reasonable trade for a fully-cooperative task
+where nothing is lost by not decentralizing.
+
 ## Evaluate
 
 ```bash
 python evaluate.py --model models/simple_spread_ppo --episodes 20
 python evaluate_tag.py --adversary-model models/simple_tag_adversary \
     --good-model models/simple_tag_good --episodes 20
+python evaluate_comm.py --model models/comm_joint_ppo --episodes 20
+python analyze_communication.py --model models/comm_joint_ppo --episodes 300
 ```
 
 Runs N seeded episodes and prints a mean ± std reward summary — a single episode
 is too noisy to be a meaningful result on its own (see the simple_tag results
 table above). Add `--render` to watch one episode interactively instead. Omit
 either `--adversary-model`/`--good-model` to use a random policy for that role,
-useful for baseline comparisons.
+useful for baseline comparisons. `analyze_communication.py` is specifically for
+`simple_speaker_listener`: it computes the mutual information between the true
+target and the speaker's message to check whether a real protocol emerged (see
+the results above).
 
 Regenerate the demo GIFs (omit `--model`/`--*-model` args for a random-policy
 baseline):
@@ -132,6 +189,7 @@ baseline):
 python record_demo.py --model models/simple_spread_ppo --out assets/demo_trained.gif
 python record_demo_tag.py --adversary-model models/simple_tag_adversary \
     --good-model models/simple_tag_good --out assets/demo_tag.gif
+python record_demo_comm.py --model models/comm_joint_ppo --out assets/demo_comm.gif
 ```
 
 ## Test
@@ -142,12 +200,13 @@ ruff check .
 pytest tests/
 ```
 
-Unit tests cover `FixedOpponentWrapper`'s agent-filtering/action-merging logic
-against a fake env — the training loops themselves are stochastic and not a
-useful unit-test target, so CI instead smoke-tests them end-to-end (tiny
-timestep counts, real environments) rather than trying to assert on outcomes.
+Unit tests cover `FixedOpponentWrapper`'s and `JointPolicyEnv`'s pure
+agent-filtering/obs-flattening logic against fake envs — the training loops
+themselves are stochastic and not a useful unit-test target, so CI instead
+smoke-tests them end-to-end (tiny timestep counts, real environments) rather
+than trying to assert on outcomes.
 
-## Design notes / what I learned
+## Design notes / what I learned <a name="emergent-communication-design-notes"></a>
 
 - **PettingZoo's MPE environments moved to a separate `mpe2` package** in recent
   PettingZoo releases (1.27+) — most tutorials still reference the old
@@ -175,18 +234,40 @@ timestep counts, real environments) rather than trying to assert on outcomes.
   why its evaluation numbers have much higher variance and need a 20-episode mean
   to say anything, versus a single episode being roughly informative for
   `simple_spread`.
-- CI runs tiny smoke tests (train + evaluate, both tasks) plus the real unit
-  test suite on every push — enough to catch import/shape/API-breakage
+- **A rising reward curve doesn't prove the thing you set out to test.**
+  `simple_speaker_listener`'s reward improved substantially (-38 → -15), which
+  would normally be reported as a win — but `analyze_communication.py` shows the
+  speaker's message carries ~1% of the mutual information it would need to encode
+  the target. The reward gain is real, but it's most likely the listener finding
+  a generically useful movement policy that doesn't require decoding anything,
+  not emergent communication. I only caught this because I built a metric to
+  check the actual claim (message ↔ target correspondence) instead of trusting
+  the reward curve alone — a reminder that in RL, the reward going up is
+  evidence for "the policy improved," never proof of *how* it improved.
+- **What would likely fix `simple_speaker_listener`, in priority order**: (1)
+  more timesteps — 200k may simply be short for this harder credit-assignment
+  problem (the reward signal has to propagate from listener behavior back
+  through the discrete message to the speaker's parameters, which is a longer
+  causal chain than either of the other two tasks); (2) an entropy or
+  diversity bonus specifically on the speaker's message distribution, so
+  using the channel is directly incentivized rather than incidental; (3)
+  curriculum — start with a smaller number of possible targets, or reduce
+  `max_cycles` so movement-only strategies have less time to close the gap
+  without communication.
+- CI runs tiny smoke tests (train + evaluate, all three tasks) plus the real
+  unit test suite on every push — enough to catch import/shape/API-breakage
   regressions in under a couple of minutes, without needing a real GPU runner.
 
 ## Next steps
 
-- **Emergent communication** (planned next) — PettingZoo's
-  `simple_speaker_listener`/`simple_reference` environments, where one agent
-  can observe the goal but can't act on it and another can act but can't
-  observe it, forcing a learned communication protocol between them.
+- **Get `simple_speaker_listener` actually communicating** — see the priority
+  list above (more timesteps, a message-entropy bonus, or curriculum). This is
+  the most valuable open item: right now the task's headline claim
+  ("emergent communication") isn't yet backed by the mutual-information result.
 - Swap PPO for another SB3 algorithm, or attempt true simultaneous self-play
   (both `simple_tag` roles improving together, e.g. via RLlib) instead of the
   freeze-one-side approach used here.
-- A natural-language "mission control" layer on trained policies (via the
-  Claude API) as a stretch/demo feature, once the above lands.
+- A natural-language "mission control" or protocol-interpretation layer (via
+  the Claude API) as a stretch/demo feature — worth revisiting once
+  `simple_speaker_listener` actually has a real protocol for an LLM to
+  describe; not much to interpret in a near-zero-mutual-information result.

@@ -39,3 +39,9 @@ jobs:
 
       - name: Evaluate simple_tag
         run: python evaluate_tag.py --adversary-model models/ci_tag_adv --good-model models/ci_tag_good --episodes 1
+
+      - name: Train simple_speaker_listener (tiny smoke test)
+        run: python train_comm.py --timesteps 3000 --out models/ci_comm --monitor-log logs/ci_comm_monitor.csv
+
+      - name: Evaluate simple_speaker_listener
+        run: python evaluate_comm.py --model models/ci_comm --episodes 1
