@@ -265,6 +265,13 @@ python comm/record_demo.py --model models/comm_ppo --out assets/demo_comm.gif
 
 **[claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff](https://claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff)**
 
+The `simple_speaker_listener` tab includes a "force the message" widget: holding
+the listener's own observation fixed at the current frame, it reruns only the
+listener sub-network for every possible message and shows the resulting move —
+the real received message is highlighted. It's a direct, interactive way to see
+that the movement is causally driven by the message (not just landmark
+position), rather than taking the mutual-information number on faith.
+
 `tools/export_policy_weights.py` extracts a trained SB3 policy's weight matrices
 to JSON, and `tools/record_trajectories_*.py` records real rollouts (entity
 positions, observations, actions) frame by frame. `web_demo/index.html`

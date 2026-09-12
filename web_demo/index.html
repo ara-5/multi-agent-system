@@ -156,6 +156,14 @@
   .mi-readout .big { font-size: 30px; font-weight: 700; color: var(--accent); }
   .mi-readout .label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
 
+  .hijack { margin-top: 22px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+  .hijack .hijack-title { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+  .hijack-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .hijack-cell { flex: 1; min-width: 110px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center; font-family: "Space Mono", monospace; }
+  .hijack-cell.real { border-color: var(--accent); background: var(--accent-soft); }
+  .hijack-cell .msg-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .hijack-cell .move-label { font-size: 15px; margin-top: 6px; color: var(--text); font-weight: 600; }
+
   footer {
     margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border);
     font-size: 13px; color: var(--text-muted); display: flex; justify-content: space-between;
@@ -321,6 +329,15 @@
       deterministic one-message-per-target protocol. The confusion matrix above is measured over 300
       held-out episodes. A rising reward curve is evidence the policy improved &mdash; only the
       mutual-information measurement shows <em>whether that improvement was the thing being tested for</em>.</p>
+      <div class="hijack">
+        <div class="hijack-title">Try it: force the message, watch the predicted move change</div>
+        <p class="muted" style="margin:0 0 10px">Holding the listener's own observation (velocity + all 3
+        landmarks' positions) fixed at the current frame, this recomputes <em>only</em> the movement
+        sub-network for every possible message &mdash; the message actually received this frame is
+        highlighted. If the predicted move differs across the three, the listener's action is causally
+        depending on the message, not just navigating by landmark position alone.</p>
+        <div class="hijack-row" id="hijack-row"></div>
+      </div>
     </div>
   </section>
 
@@ -376,6 +393,39 @@
     const movementLogits = matVec(weights.movement_head.W, weights.movement_head.b, lx);
 
     return [argmax(messageLogits), argmax(movementLogits)];
+  }
+  // Overrides the received-message slice of the listener's own observation (the
+  // last `numMessages` entries, per MPE's simple_speaker_listener obs layout:
+  // [self_vel, landmark_rel_positions..., communication]) and reruns only the
+  // listener sub-network -- everything else about the frame (position, velocity)
+  // stays real, only the hypothetical message changes. Used by the "force the
+  // message" widget to show the movement action is causally driven by the
+  // message, not just recomputing the model's own real choice.
+  function listenerMovementForMessage(weights, obs, forcedMessage) {
+    const numMessages = weights.message_head.b.length;
+    const listenerObs = obs.slice(weights.speaker_dim);
+    const commStart = listenerObs.length - numMessages;
+    for (let k = 0; k < numMessages; k++) listenerObs[commStart + k] = k === forcedMessage ? 1 : 0;
+    let lx = listenerObs;
+    for (const layer of weights.listener_hidden_layers) lx = matVecTanh(layer.W, layer.b, lx);
+    const movementLogits = matVec(weights.movement_head.W, weights.movement_head.b, lx);
+    return argmax(movementLogits);
+  }
+  const MOVE_LABELS = ["stay", "◀ left", "▶ right", "▼ down", "▲ up"];
+  function renderHijack(weights, obs, realMessage) {
+    const row = document.getElementById("hijack-row");
+    if (!row) return;
+    const numMessages = weights.message_head.b.length;
+    let html = "";
+    for (let m = 0; m < numMessages; m++) {
+      const move = listenerMovementForMessage(weights, obs, m);
+      const isReal = m === realMessage;
+      html += `<div class="hijack-cell${isReal ? " real" : ""}">
+        <div class="msg-label">message ${m}${isReal ? " (real)" : ""}</div>
+        <div class="move-label">${MOVE_LABELS[move] || move}</div>
+      </div>`;
+    }
+    row.innerHTML = html;
   }
   function forwardPolicy(weights, obs) {
     if (weights.type === "speaker_listener_bottleneck") return forwardSpeakerListenerBottleneck(weights, obs);
@@ -589,6 +639,10 @@
           const predicted = forwardPolicy(wComm, prevObs);
           rows += checkRow("speaker msg", frame.message, predicted[0]);
           cumComm += frame.reward || 0;
+          renderHijack(wComm, prevObs, frame.message);
+        } else {
+          const row = document.getElementById("hijack-row");
+          if (row) row.innerHTML = "";
         }
         checksEl.innerHTML = rows || "<div class=\"check-row\">(initial frame)</div>";
         document.getElementById("rew-comm").textContent = cumComm.toFixed(2);
