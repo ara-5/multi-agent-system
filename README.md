@@ -36,6 +36,24 @@ those only partially worked (see
   [joint_env.py](#emergent-communication-simple_speaker_listener) below) — and,
   spoiler, it only partially worked; see the honest, measured results below.
 
+## Project layout
+
+```
+common/       shared code: FixedOpponentWrapper (simple_tag), JointPolicyEnv (comm)
+spread/       simple_spread: train.py, evaluate.py, record_demo.py
+tag/          simple_tag: train.py, evaluate.py, record_demo.py
+comm/         simple_speaker_listener: train.py, evaluate.py, record_demo.py,
+              analyze_communication.py
+tools/        plot_rewards.py, export_policy_weights.py, record_trajectories_*.py
+web_demo/     the live in-browser demo (index.html + data/)
+assets/       committed reward curves, confusion matrix, demo GIFs
+tests/        unit tests for common/
+```
+
+Every task follows the same `train.py` → `evaluate.py` → `record_demo.py`
+pattern; `tools/` and `web_demo/` build on top of whichever models the task
+folders produce.
+
 ## Demo: simple_spread (cooperative)
 
 | Random policy (untrained) | PPO policy (200k timesteps) |
@@ -115,27 +133,27 @@ pip install -e .
 
 For experiment tracking on [Weights & Biases](https://wandb.ai/) instead of static
 images, install the optional extra and log in once (`wandb login`), then pass
-`--wandb` to `train.py`:
+`--wandb` to any task's `train.py`:
 
 ```bash
 pip install -e ".[wandb]"
-python train.py --wandb --wandb-project multi-agent-system
+python spread/train.py --wandb --wandb-project multi-agent-system
 ```
 
 ## Train: simple_spread
 
 ```bash
-python train.py --timesteps 200000
+python spread/train.py --timesteps 200000
 ```
 
 Saves the trained policy to `models/simple_spread_ppo.zip`. Key flags:
 `--num-agents`, `--max-cycles`, `--num-vec-envs`, `--out`.
 
-Add `--tensorboard-log runs` to `train.py` for live TensorBoard curves, or
-regenerate the static reward-curve image from the CSV log:
+Add `--tensorboard-log runs` for live TensorBoard curves, or regenerate the
+static reward-curve image from the CSV log:
 
 ```bash
-python plot_rewards.py --log logs/monitor.csv --out assets/reward_curve.png
+python tools/plot_rewards.py --log logs/monitor.csv --out assets/reward_curve.png
 ```
 
 ## Train: simple_tag <a name="independent-policies-simple_tag"></a>
@@ -143,14 +161,14 @@ python plot_rewards.py --log logs/monitor.csv --out assets/reward_curve.png
 Stable-Baselines3 trains one policy per env, but `simple_tag`'s two roles
 (adversary/predator vs. good/prey) have different observation spaces and opposing
 rewards — parameter sharing across them isn't meaningful. This repo instead uses
-`opponent_wrapper.py`'s `FixedOpponentWrapper` to expose only one role as
+`common/opponent_wrapper.py`'s `FixedOpponentWrapper` to expose only one role as
 controllable per training run, with the other role acting via a fixed policy
 (random, or a previously trained model): train adversaries vs. a random prey
 baseline, then train prey against the now-frozen trained adversary.
 
 ```bash
-python train_tag.py --role adversary --timesteps 100000 --out models/simple_tag_adversary
-python train_tag.py --role good --opponent-model models/simple_tag_adversary \
+python tag/train.py --role adversary --timesteps 100000 --out models/simple_tag_adversary
+python tag/train.py --role good --opponent-model models/simple_tag_adversary \
     --timesteps 100000 --out models/simple_tag_good
 ```
 
@@ -164,13 +182,13 @@ Unlike `simple_tag`, this task is fully cooperative with one shared reward — s
 unlike the freeze-one-side approach above, freezing either agent here breaks
 learning entirely (a frozen random speaker sends a message uncorrelated with the
 target, so there's nothing for the listener to learn to decode). Instead,
-`joint_env.py`'s `JointPolicyEnv` flattens both agents into a single
+`common/joint_env.py`'s `JointPolicyEnv` flattens both agents into a single
 `gymnasium.Env`: one PPO policy sees both agents' observations concatenated and
 outputs both agents' actions at once (a `MultiDiscrete` joint action space),
 so the two roles are trained simultaneously by construction.
 
 ```bash
-python train_comm.py --out models/comm_joint_ppo
+python comm/train.py --out models/comm_joint_ppo
 ```
 
 (Defaults to 1M timesteps and `ent_coef=0.02` — see
@@ -184,11 +202,11 @@ where nothing is lost by not decentralizing.
 ## Evaluate
 
 ```bash
-python evaluate.py --model models/simple_spread_ppo --episodes 20
-python evaluate_tag.py --adversary-model models/simple_tag_adversary \
+python spread/evaluate.py --model models/simple_spread_ppo --episodes 20
+python tag/evaluate.py --adversary-model models/simple_tag_adversary \
     --good-model models/simple_tag_good --episodes 20
-python evaluate_comm.py --model models/comm_joint_ppo --episodes 20
-python analyze_communication.py --model models/comm_joint_ppo --episodes 300
+python comm/evaluate.py --model models/comm_joint_ppo --episodes 20
+python comm/analyze_communication.py --model models/comm_joint_ppo --episodes 300
 ```
 
 Runs N seeded episodes and prints a mean ± std reward summary — a single episode
@@ -204,31 +222,31 @@ Regenerate the demo GIFs (omit `--model`/`--*-model` args for a random-policy
 baseline):
 
 ```bash
-python record_demo.py --model models/simple_spread_ppo --out assets/demo_trained.gif
-python record_demo_tag.py --adversary-model models/simple_tag_adversary \
+python spread/record_demo.py --model models/simple_spread_ppo --out assets/demo_trained.gif
+python tag/record_demo.py --adversary-model models/simple_tag_adversary \
     --good-model models/simple_tag_good --out assets/demo_tag.gif
-python record_demo_comm.py --model models/comm_joint_ppo --out assets/demo_comm.gif
+python comm/record_demo.py --model models/comm_joint_ppo --out assets/demo_comm.gif
 ```
 
 ## Live demo (`web_demo/`)
 
 **[claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff](https://claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff)**
 
-`export_policy_weights.py` extracts a trained SB3 policy's weight matrices to
-JSON, and `record_trajectories*.py` records real rollouts (entity positions,
-observations, actions) frame by frame. `web_demo/index.html` reimplements the
-policy's forward pass (two `tanh` hidden layers + a linear action head — SB3's
-default `MlpPolicy` architecture) in ~30 lines of plain JavaScript, then, for
-every frame of a replayed rollout, recomputes the action from the recorded
-observation and checks it against what Python actually chose. Regenerate the
-data any of these scripts produce with:
+`tools/export_policy_weights.py` extracts a trained SB3 policy's weight matrices
+to JSON, and `tools/record_trajectories_*.py` records real rollouts (entity
+positions, observations, actions) frame by frame. `web_demo/index.html`
+reimplements the policy's forward pass (two `tanh` hidden layers + a linear
+action head — SB3's default `MlpPolicy` architecture) in ~30 lines of plain
+JavaScript, then, for every frame of a replayed rollout, recomputes the action
+from the recorded observation and checks it against what Python actually chose.
+Regenerate the data any of these scripts produce with:
 
 ```bash
-python export_policy_weights.py --model models/simple_spread_ppo --out web_demo/data/weights_spread.json
-python record_trajectories.py --model models/simple_spread_ppo --out web_demo/data/trajectories_spread.json
-python record_trajectories_tag.py --out web_demo/data/trajectories_tag.json
-python record_trajectories_comm.py --model models/comm_joint_ppo --out web_demo/data/trajectories_comm.json
-python analyze_communication.py --episodes 300 --json-out web_demo/data/analysis_comm.json
+python tools/export_policy_weights.py --model models/simple_spread_ppo --out web_demo/data/weights_spread.json
+python tools/record_trajectories_spread.py --model models/simple_spread_ppo --out web_demo/data/trajectories_spread.json
+python tools/record_trajectories_tag.py --out web_demo/data/trajectories_tag.json
+python tools/record_trajectories_comm.py --model models/comm_joint_ppo --out web_demo/data/trajectories_comm.json
+python comm/analyze_communication.py --episodes 300 --json-out web_demo/data/analysis_comm.json
 ```
 
 ## Test
@@ -254,7 +272,8 @@ than trying to assert on outcomes.
   is the simplest way to get PettingZoo working with an off-the-shelf SB3
   algorithm, but it assumes homogeneous agents (same obs/action space) — it
   doesn't work for an asymmetric task like `simple_tag`, which is why that task
-  uses `FixedOpponentWrapper` instead (see [Train: simple_tag](#independent-policies-simple_tag)).
+  uses `common/opponent_wrapper.py`'s `FixedOpponentWrapper` instead (see
+  [Train: simple_tag](#independent-policies-simple_tag)).
 - **200k timesteps of untuned PPO on CPU gets modest but real improvement**
   (rolling mean reward roughly -28 → -22) — not a dramatic result, which is
   itself informative: `simple_spread`'s reward is dense and shaped, so most of
@@ -264,7 +283,7 @@ than trying to assert on outcomes.
   accounting, on purpose** — don't be alarmed that they don't match. During
   training, SuperSuit vectorizes each agent into its own env slot, so
   `VecMonitor`'s per-episode reward in `assets/reward_curve.png` is a *single
-  agent's* return. `evaluate.py` instead sums reward across every agent's turn
+  agent's* return. `spread/evaluate.py` instead sums reward across every agent's turn
   in the AEC loop; since `simple_spread` gives every agent the same shared team
   reward each step, that sum is roughly `num_agents`x larger in magnitude
   (hence -22 during training vs. -66 in a 3-agent evaluation of the same policy).
@@ -276,7 +295,7 @@ than trying to assert on outcomes.
 - **A rising reward curve doesn't prove the thing you set out to test.**
   `simple_speaker_listener`'s first-attempt reward improved substantially
   (-38 → -15), which would normally be reported as a win — but
-  `analyze_communication.py` showed the speaker's message carried only ~1% of
+  `comm/analyze_communication.py` showed the speaker's message carried only ~1% of
   the mutual information it would need to encode the target. The reward gain
   was real, but most likely the listener finding a generically useful movement
   policy that didn't require decoding anything. I only caught this because I

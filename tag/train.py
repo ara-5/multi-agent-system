@@ -11,7 +11,7 @@ from mpe2 import simple_tag_v3
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecMonitor
 
-from opponent_wrapper import FixedOpponentWrapper, load_opponent_policy
+from common.opponent_wrapper import FixedOpponentWrapper, load_opponent_policy
 
 
 def make_env(role, num_good, num_adversaries, num_obstacles, max_cycles, num_vec_envs, opponent_model, monitor_file=None):

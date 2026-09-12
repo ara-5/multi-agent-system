@@ -2,7 +2,7 @@
 minimal fake cooperative ParallelEnv instead of a real PettingZoo environment."""
 from gymnasium import spaces
 
-from joint_env import JointPolicyEnv
+from common.joint_env import JointPolicyEnv
 
 
 class FakeCoopEnv:

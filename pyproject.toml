@@ -28,8 +28,4 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = [
-    "train", "evaluate", "plot_rewards", "record_demo",
-    "train_tag", "evaluate_tag", "record_demo_tag", "opponent_wrapper",
-    "joint_env", "train_comm", "evaluate_comm", "record_demo_comm", "analyze_communication",
-]
+packages = ["common"]

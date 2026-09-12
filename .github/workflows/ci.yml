@@ -26,22 +26,22 @@ jobs:
         run: pytest tests/ -v
 
       - name: Train simple_spread (tiny smoke test)
-        run: python train.py --timesteps 4000 --num-vec-envs 2 --out models/ci_smoke_test
+        run: python spread/train.py --timesteps 4000 --num-vec-envs 2 --out models/ci_smoke_test
 
       - name: Evaluate simple_spread
-        run: python evaluate.py --model models/ci_smoke_test --episodes 1
+        run: python spread/evaluate.py --model models/ci_smoke_test --episodes 1
 
       - name: Train simple_tag adversary (tiny smoke test)
-        run: python train_tag.py --role adversary --timesteps 3000 --num-vec-envs 2 --out models/ci_tag_adv
+        run: python tag/train.py --role adversary --timesteps 3000 --num-vec-envs 2 --out models/ci_tag_adv
 
       - name: Train simple_tag good vs. trained adversary (tiny smoke test)
-        run: python train_tag.py --role good --opponent-model models/ci_tag_adv --timesteps 3000 --num-vec-envs 2 --out models/ci_tag_good
+        run: python tag/train.py --role good --opponent-model models/ci_tag_adv --timesteps 3000 --num-vec-envs 2 --out models/ci_tag_good
 
       - name: Evaluate simple_tag
-        run: python evaluate_tag.py --adversary-model models/ci_tag_adv --good-model models/ci_tag_good --episodes 1
+        run: python tag/evaluate.py --adversary-model models/ci_tag_adv --good-model models/ci_tag_good --episodes 1
 
       - name: Train simple_speaker_listener (tiny smoke test)
-        run: python train_comm.py --timesteps 3000 --out models/ci_comm --monitor-log logs/ci_comm_monitor.csv
+        run: python comm/train.py --timesteps 3000 --out models/ci_comm --monitor-log logs/ci_comm_monitor.csv
 
       - name: Evaluate simple_speaker_listener
-        run: python evaluate_comm.py --model models/ci_comm --episodes 1
+        run: python comm/evaluate.py --model models/ci_comm --episodes 1

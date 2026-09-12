@@ -4,7 +4,7 @@ import argparse
 import imageio.v2 as imageio
 from mpe2 import simple_tag_v3
 
-from opponent_wrapper import load_opponent_policy
+from common.opponent_wrapper import load_opponent_policy
 
 
 def main():

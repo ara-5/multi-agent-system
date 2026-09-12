@@ -12,7 +12,7 @@ from mpe2 import simple_speaker_listener_v4
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 
-from joint_env import JointPolicyEnv
+from common.joint_env import JointPolicyEnv
 
 
 def make_env(max_cycles: int, monitor_file: str | None = None):

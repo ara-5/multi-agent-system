@@ -6,7 +6,7 @@ import imageio.v2 as imageio
 from mpe2 import simple_speaker_listener_v4
 from stable_baselines3 import PPO
 
-from joint_env import JointPolicyEnv
+from common.joint_env import JointPolicyEnv
 
 
 def main():

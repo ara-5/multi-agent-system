@@ -1,0 +1,13 @@
+.git/
+.venv/
+__pycache__/
+*.pyc
+models/
+*.zip
+logs/
+runs/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+assets/
+web_demo/data/

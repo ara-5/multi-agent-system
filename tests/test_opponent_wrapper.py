@@ -4,7 +4,7 @@ Uses a minimal fake ParallelEnv instead of a real PettingZoo environment, since
 the wrapper's behavior is pure bookkeeping that doesn't depend on any particular
 env's dynamics -- these should run in milliseconds with no training involved.
 """
-from opponent_wrapper import FixedOpponentWrapper
+from common.opponent_wrapper import FixedOpponentWrapper
 
 
 class FakeSpace:
