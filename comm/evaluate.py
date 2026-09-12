@@ -14,13 +14,14 @@ from common.joint_env import JointPolicyEnv
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="models/comm_ppo")
+    parser.add_argument("--model", default="models/comm_ppo",
+                         help="Path to a trained model; pass an empty string for a random-policy baseline")
     parser.add_argument("--episodes", type=int, default=20)
     parser.add_argument("--base-seed", type=int, default=0)
     parser.add_argument("--max-cycles", type=int, default=25)
     args = parser.parse_args()
 
-    model = PPO.load(args.model)
+    model = PPO.load(args.model) if args.model else None
     env = JointPolicyEnv(lambda: simple_speaker_listener_v4.parallel_env(
         max_cycles=args.max_cycles, continuous_actions=False
     ))
@@ -31,7 +32,10 @@ def main():
         total_reward = 0.0
         terminated = truncated = False
         while not (terminated or truncated):
-            action, _ = model.predict(obs, deterministic=True)
+            if model is not None:
+                action, _ = model.predict(obs, deterministic=True)
+            else:
+                action = env.action_space.sample()
             obs, reward, terminated, truncated, _info = env.step(action)
             total_reward += reward
         episode_rewards.append(total_reward)

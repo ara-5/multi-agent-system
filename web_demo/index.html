@@ -313,6 +313,9 @@
           <div class="label">Mutual information, target &harr; message</div>
           <div class="big" id="mi-value">&hellip;</div>
           <div class="label" id="mi-sub">&nbsp;</div>
+          <div class="label" style="margin-top:12px">Message entropy (are all 3 messages used?)</div>
+          <div class="big" id="entropy-value" style="font-size:20px">&hellip;</div>
+          <div class="label" id="entropy-sub">&nbsp;</div>
         </div>
       </div>
       <p style="margin-top:16px"><strong>Four attempts, same task &mdash; reward improved on all of them,
@@ -695,6 +698,11 @@
     const pct = (analysisComm.mutual_info_bits / analysisComm.max_mutual_info_bits) * 100;
     document.getElementById("mi-value").textContent = analysisComm.mutual_info_bits.toFixed(4) + " bits";
     document.getElementById("mi-sub").textContent = pct.toFixed(1) + "% of " + analysisComm.max_mutual_info_bits.toFixed(3) + "-bit max · " + analysisComm.episodes + " episodes";
+    if (analysisComm.message_entropy_bits !== undefined) {
+      const epct = (analysisComm.message_entropy_bits / analysisComm.max_message_entropy_bits) * 100;
+      document.getElementById("entropy-value").textContent = analysisComm.message_entropy_bits.toFixed(4) + " bits";
+      document.getElementById("entropy-sub").textContent = epct.toFixed(1) + "% of " + analysisComm.max_message_entropy_bits.toFixed(3) + "-bit max — high entropy alone doesn't prove a protocol (a random policy scores ~100% too); it only means something once MI is high too.";
+    }
     document.getElementById("mi-callout").textContent = pct.toFixed(1) + "%";
 
     // ---- tabs ----

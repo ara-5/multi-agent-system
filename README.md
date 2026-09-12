@@ -122,21 +122,33 @@ not an incidental correlation.
 That result took three attempts to get right, and the two that didn't work are
 exactly why this section exists — see
 [Design notes](#emergent-communication-design-notes) for the full story, but
-briefly:
+briefly (all rows: 20-episode reward mean ± std, 300-episode MI/entropy;
+`comm/evaluate.py` + `comm/analyze_communication.py`, same seeds):
 
-| Attempt | Architecture | Training | Mutual information |
+| Model | Reward | Mutual information | Message entropy |
 | --- | --- | --- | --- |
-| 1 | single shared network over both agents' obs | 200k steps, `ent_coef=0.0` | 0.9% of max |
-| 2 | same architecture | 1M steps, `ent_coef=0.02` | 13.5% of max |
-| 3 | independent speaker/listener sub-networks (bottleneck) | 300k steps, `ent_coef=0.0` | 55.3% of max (partial: 2 of 3 messages used) |
-| 4 | same bottleneck | 300k steps, `ent_coef=0.01` | **99.7% of max** |
+| Random policy | -50.71 ± 42.07 | 1.0% of max | 99.8% of max |
+| 1. Shared network, 200k steps, `ent_coef=0.0` | -18.86 ± 12.82 | 0.9% of max | 99.6% of max |
+| 2. Shared network, 1M steps, `ent_coef=0.02` | -11.30 ± 7.64 | 13.5% of max | 98.1% of max |
+| 3. Bottleneck architecture, 300k steps, `ent_coef=0.0` | -19.89 ± 12.58 | 55.3% of max | 55.3% of max |
+| 4. Bottleneck architecture, 300k steps, `ent_coef=0.01` | -20.50 ± 12.42 | **99.7% of max** | **99.7% of max** |
 
 Attempts 1–2 improved reward while barely moving the metric that actually
 mattered, because that architecture never required the message to carry any
-information at all. Attempt 3 fixed the architecture and jumped immediately,
-but settled for a partial protocol. Attempt 4 added back a small entropy bonus
-— this time on an architecture where it could actually help — and closed the
-rest of the gap.
+information at all — note their message entropy is *high* (98–99.6% of max,
+same as random): the speaker was already using all 3 messages plenty, just not
+*informatively*. That's the tell that message entropy alone (a common proxy in
+emergent-communication work) isn't sufficient evidence of a protocol — a
+policy can use its full message vocabulary and still convey nothing. Attempt 3
+fixed the architecture and jumped immediately, but settled for a protocol
+using only 2 of 3 messages — and notice its MI and entropy are numerically
+identical (0.877 bits both), which isn't a coincidence: whenever the
+target→message mapping is deterministic, mutual information *equals* message
+entropy exactly (there's no uncertainty left to subtract). Attempt 4 added
+back a small entropy bonus — this time on an architecture where it could
+actually help — and closed the rest of the gap, landing on the same
+MI-equals-entropy signature at the maximum instead of a partial one: a clean,
+fully-used, fully-informative protocol.
 
 ## Setup
 
