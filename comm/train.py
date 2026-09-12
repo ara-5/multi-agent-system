@@ -39,6 +39,9 @@ def main():
                               "enough for decent reward. A small entropy bonus discourages settling for "
                               "that partial equilibrium and gets 99.7%% -- see Design notes in the README.")
     parser.add_argument("--hidden-dim", type=int, default=64)
+    parser.add_argument("--seed", type=int, default=None,
+                         help="Seeds network init, env resets during training, and action sampling "
+                              "(via SB3's set_random_seed) -- for multi-seed reproducibility checks.")
     parser.add_argument("--out", default="models/comm_ppo")
     parser.add_argument("--tensorboard-log", default=None)
     parser.add_argument("--monitor-log", default="logs/comm_monitor.csv")
@@ -67,7 +70,7 @@ def main():
     }
     model = PPO(
         SpeakerListenerBottleneckPolicy, env, verbose=1, ent_coef=args.ent_coef,
-        policy_kwargs=policy_kwargs, tensorboard_log=args.tensorboard_log,
+        policy_kwargs=policy_kwargs, tensorboard_log=args.tensorboard_log, seed=args.seed,
     )
     model.learn(total_timesteps=args.timesteps, callback=callback)
 

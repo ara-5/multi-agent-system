@@ -108,21 +108,24 @@ that's why the table reports 20-episode means rather than a single run.
 Reward (shared, negative listener-to-target distance) improves substantially
 over training. On its own that would only be weak evidence the agents learned
 to *communicate* specifically — this task's actual result took two more
-architecture attempts and a real metric to get right:
+architecture attempts, a real metric, and a multi-seed check that overturned
+the first conclusion, to get right:
 
 ![message vs. target confusion matrix](assets/comm_confusion_matrix.png)
 
-**The result** (bottleneck architecture, 300k timesteps, `ent_coef=0.01`):
-mutual information between the true target and the speaker's message is
-**1.5802 bits — 99.7% of the 1.585-bit maximum.** The confusion matrix above
-(300 held-out episodes) is a clean diagonal: each target maps to its own
-message with essentially zero confusion — a real, near-deterministic protocol,
-not an incidental correlation.
+**The headline number**: the best model found (bottleneck architecture,
+300k timesteps, `ent_coef=0.01`) reaches mutual information of **1.5802 bits
+— 99.7% of the 1.585-bit maximum**, and the confusion matrix above (300
+held-out episodes) is a clean diagonal — a real protocol, not an incidental
+correlation. But that number, on its own, overstates how *reliably* this
+setup produces a protocol — see below.
 
-That result took three attempts to get right, and the two that didn't work are
-exactly why this section exists — see
-[Design notes](#emergent-communication-design-notes) for the full story, but
-briefly (all rows: 20-episode reward mean ± std, 300-episode MI/entropy;
+That result took three attempts to get right — see
+[Design notes](#emergent-communication-design-notes) for the full story —
+plus a fourth step that mattered just as much: rerunning the two bottleneck
+conditions with 2 more random seeds each, because a single training run can't
+tell you whether a result is a reliable effect or a lucky draw (all rows:
+20-episode reward mean ± std, 300-episode MI/entropy;
 `comm/evaluate.py` + `comm/analyze_communication.py`, same seeds):
 
 | Model | Reward | Mutual information | Message entropy |
@@ -130,8 +133,8 @@ briefly (all rows: 20-episode reward mean ± std, 300-episode MI/entropy;
 | Random policy | -50.71 ± 42.07 | 1.0% of max | 99.8% of max |
 | 1. Shared network, 200k steps, `ent_coef=0.0` | -18.86 ± 12.82 | 0.9% of max | 99.6% of max |
 | 2. Shared network, 1M steps, `ent_coef=0.02` | -11.30 ± 7.64 | 13.5% of max | 98.1% of max |
-| 3. Bottleneck architecture, 300k steps, `ent_coef=0.0` | -19.89 ± 12.58 | 55.3% of max | 55.3% of max |
-| 4. Bottleneck architecture, 300k steps, `ent_coef=0.01` | -20.50 ± 12.42 | **99.7% of max** | **99.7% of max** |
+| 3. Bottleneck architecture, 300k steps, `ent_coef=0.0` — **3 seeds** | -20.37 ± 0.71 | 58.1% ± 2.0% of max | 58.1% ± 2.0% of max |
+| 4. Bottleneck architecture, 300k steps, `ent_coef=0.01` — **3 seeds** | -20.51 ± 0.11 | 51.7% ± 40.8% of max | 51.7% ± 40.8% of max |
 
 Attempts 1–2 improved reward while barely moving the metric that actually
 mattered, because that architecture never required the message to carry any
@@ -139,16 +142,43 @@ information at all — note their message entropy is *high* (98–99.6% of max,
 same as random): the speaker was already using all 3 messages plenty, just not
 *informatively*. That's the tell that message entropy alone (a common proxy in
 emergent-communication work) isn't sufficient evidence of a protocol — a
-policy can use its full message vocabulary and still convey nothing. Attempt 3
-fixed the architecture and jumped immediately, but settled for a protocol
-using only 2 of 3 messages — and notice its MI and entropy are numerically
-identical (0.877 bits both), which isn't a coincidence: whenever the
-target→message mapping is deterministic, mutual information *equals* message
-entropy exactly (there's no uncertainty left to subtract). Attempt 4 added
-back a small entropy bonus — this time on an architecture where it could
-actually help — and closed the rest of the gap, landing on the same
-MI-equals-entropy signature at the maximum instead of a partial one: a clean,
-fully-used, fully-informative protocol.
+policy can use its full message vocabulary and still convey nothing.
+
+Attempt 3 (bottleneck architecture, no entropy bonus) fixed the shortcut and
+is **highly consistent across seeds**: 55.3%, 59.5%, 59.5% — every run lands
+on a stable, deterministic protocol that distinguishes one target from the
+other two, but never fully separates all three. Attempt 4 (same architecture
++ a small entropy bonus) is where the story gets more interesting than a
+clean success: across the *same* 3 seeds, mutual information came out
+**99.7%, 0.0%, and 55.3%** — the entropy bonus's one prior result (99.7%,
+featured above and in the live demo) turned out to be the best of three, not
+the reliable outcome. The 0.0% run is a complete collapse:
+
+![message vs. target confusion matrix showing complete collapse](assets/comm_confusion_matrix_entropy_collapse.png)
+
+the speaker emitting the *same single message regardless of target*, every
+episode — the entropy bonus didn't just fail to help that seed, it destroyed
+the protocol attempt 3 would have found without it. On
+average, adding the entropy bonus did not outperform the architecture fix
+alone, and made the outcome far less predictable (std of ±40.8 points vs.
+±2.0). The honest conclusion: **the architecture fix (splitting the network)
+is a reliable, load-bearing result** — it consistently produces at least a
+partial protocol, every seed, every time. **The entropy bonus on top of it is
+not reliable** — it's a high-variance nudge that can just as easily erase the
+signal as complete it, and calling attempt 4 "solved" from a single run (as
+this README did, before rerunning it with more seeds) would have been the
+exact reward-curve-shaped mistake this project keeps warning about, just one
+level higher: a metric-curve-shaped mistake instead of a reward-curve-shaped
+one.
+
+One more thing the multi-seed run makes vivid: reward barely moves across
+this entire range. -20.37 (partial protocol, every seed) vs. -20.51 ± 0.11
+(collapse, partial, or near-perfect protocol, same reward to two decimal
+places) — a *complete* communication collapse gets statistically
+indistinguishable reward from a *clean, near-deterministic* protocol. If this
+project had only looked at reward, all four attempts would have looked like
+the same, boring, mediocre result — and both the original bug and this
+seed-variance finding would have gone completely unnoticed.
 
 ## Setup
 
@@ -232,12 +262,15 @@ python comm/train.py --out models/comm_ppo
 ```
 
 (Defaults to 300k timesteps and `ent_coef=0.01`. The bottleneck architecture
-alone, with no entropy bonus, already reaches 55.3% of max mutual information
-in the same 300k steps — architecture was the main lever, not tuning — but it
-can settle for a protocol that only distinguishes 2 of 3 targets; the entropy
-bonus closes the rest of the gap. See
-[Design notes](#emergent-communication-design-notes) for the full story,
-including the original single-network approach, kept at
+alone, with no entropy bonus, is the reliable part of this result: it
+consistently reaches ~55-60% of max mutual information across seeds —
+architecture was the main lever, not tuning — but settles for a protocol
+that only distinguishes 2 of 3 targets. The default `ent_coef=0.01` is *not*
+a reliable fix for that remaining gap: across 3 seeds it produced anywhere
+from a complete communication collapse to a clean, fully-separated protocol.
+Pass `--seed N` to reproduce a specific run, and see
+[Design notes](#emergent-communication-design-notes) for the full multi-seed
+story, including the original single-network approach, kept at
 `comm/train_baseline.py` for the record.) This is centralized training *and*
 centralized execution (one policy needs both agents' observations at inference
 time too) — a real limitation compared to decentralized execution, but a
@@ -397,16 +430,36 @@ than trying to assert on outcomes.
   optimum, not noise — the listener still observes all 3 landmarks' raw
   positions and can partially compensate for an ambiguous message, so there
   was already-decent reward without ever needing the third message. Adding
-  back a small entropy bonus (`ent_coef=0.01`) — this time on an architecture
-  where it could actually do something — discouraged settling for that partial
-  equilibrium and closed the rest of the gap: **99.7% of max**, a clean
-  diagonal confusion matrix.
-- **This is the clearest example in the repo of reward-curve-vs-reality, and
-  of a fix only working once it targets the right layer**: four training runs,
-  same task, same eval script — reward improved on all of them, but the honest
-  metric (mutual information) shows that two of those runs were tuning the
-  wrong thing entirely, and the fix that actually worked was a ~40-line policy
-  architecture change, not more compute.
+  back a small entropy bonus (`ent_coef=0.01`) discouraged settling for that
+  partial equilibrium in this particular run and reached **99.7% of max**, a
+  clean diagonal confusion matrix.
+- **A single run of "it worked" is exactly the claim this whole investigation
+  says not to trust — so I reran both bottleneck conditions with 2 more
+  random seeds each before believing it.** The architecture-alone condition
+  held up: 55.3%, 59.5%, 59.5% across 3 seeds, consistently landing on the
+  same partial (2-of-3-message) protocol every time. The
+  architecture-plus-entropy condition did not: the same 3 seeds gave **99.7%,
+  0.0%, and 55.3%**. The 0.0% run isn't a measurement fluke — its confusion
+  matrix shows the speaker emitting the exact same message on every single
+  episode regardless of target, a total collapse. The entropy bonus doesn't
+  reliably nudge the policy past the 2-of-3-message local optimum; it
+  destabilizes it, and which direction that instability breaks — into a
+  clean protocol or into total silence — looks like it depends on the
+  interaction between the bonus and that seed's random initialization, not
+  on anything the bonus is actually targeted at.
+- **This is the clearest example in the repo of reward-curve-vs-reality, at
+  two different levels.** Four architectures/tuning combinations, same task,
+  same eval script — reward improved on (almost) all of them, but the honest
+  metric (mutual information) shows two of those runs were tuning the wrong
+  thing entirely, and the fix that actually mattered was a ~40-line policy
+  architecture change, not more compute. Then, one level up: *the metric
+  itself*, measured from a single run, told a story ("entropy bonus closes
+  the gap") that a multi-seed rerun overturned ("entropy bonus is a
+  high-variance gamble that isn't reliably better than the architecture fix
+  alone, and can be actively worse"). And at both levels, reward stayed
+  almost identical throughout (-20.37 to -20.51 across every architecture-3/4
+  variant, collapse included) — if this project had stopped at reward, none
+  of this would have been visible at all.
 - CI runs tiny smoke tests (train + evaluate, all four scripts across three
   tasks — including both the working and the historical baseline
   `simple_speaker_listener` architectures) plus the real unit test suite on
@@ -415,12 +468,21 @@ than trying to assert on outcomes.
 
 ## Next steps
 
+- **Find a reliable way to close the remaining gap** — the architecture fix
+  (splitting the network) is solid and reproducible across seeds, but the
+  entropy bonus on top of it isn't: 3 seeds gave 99.7%/0.0%/55.3% mutual
+  information, occasionally destroying the protocol attempt 3 would have
+  found without it. A direct MI-based auxiliary loss (rewarding the
+  actual target↔message correlation, rather than discouraging low-entropy
+  policies in general) is the obvious next thing to try — it's targeted at
+  the thing that's actually being measured, unlike a generic entropy bonus
+  that happens to sometimes help and sometimes hurt. `comm/train.py --seed N`
+  is already wired up for reruns if you want to explore this.
 - A natural-language "mission control" or protocol-interpretation layer (via
-  the Claude API) — much more viable now than it would have been against the
-  original near-zero-mutual-information result: `simple_speaker_listener`'s
-  message ↔ target mapping is now a clean bijection (99.7% of max MI), so an
-  LLM narrating "the speaker is telling the listener to go to landmark 2" has
-  an actual protocol to describe, not noise.
+  the Claude API) — meaningful for a seed that lands on the clean-protocol
+  outcome (message ↔ target is a bijection there), though not guaranteed
+  given the variance above; an LLM narrating "the speaker is telling the
+  listener to go to landmark 2" needs an actual protocol to describe first.
 - Swap PPO for another SB3 algorithm, or attempt true simultaneous self-play
   (both `simple_tag` roles improving together, e.g. via RLlib) instead of the
   freeze-one-side approach used here.
