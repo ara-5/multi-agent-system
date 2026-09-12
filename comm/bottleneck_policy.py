@@ -112,3 +112,11 @@ class SpeakerListenerBottleneckPolicy(ActorCriticPolicy):
             self.features_extractor.apply(partial(self.init_weights, gain=np.sqrt(2)))
 
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
+
+    def message_logits(self, features: th.Tensor) -> th.Tensor:
+        """The speaker sub-network's raw output for a batch of extracted features
+        (i.e. the output of self.extract_features(obs)) -- used by mi_ppo.py's
+        mutual-information auxiliary loss, which needs direct access to just the
+        message channel, not the full joint action."""
+        speaker_slice = features[:, : self.speaker_obs_dim]
+        return self.mlp_extractor.message_head(self.mlp_extractor.speaker_net(speaker_slice))

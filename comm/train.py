@@ -3,17 +3,30 @@ that forces a real communication protocol to emerge -- see bottleneck_policy.py
 for why. train_baseline.py is the earlier, naive single-shared-trunk approach,
 kept for the record: it plateaus at 13.5% of max mutual information between
 target and message no matter how it's tuned, because nothing in that
-architecture ever requires the message to carry the information at all. This
-script fixes that at the root and reaches 99.7% (see Design notes in the
-README for the full before/after story and why the entropy bonus below is
-still needed on top of the architecture fix).
+architecture ever requires the message to carry the information at all.
+
+The bottleneck architecture alone (--ent-coef 0.0 --mi-coef 0.0) reliably
+reaches ~55-60% of max mutual information across seeds -- a stable but
+partial protocol using only 2 of the 3 message symbols. A generic entropy
+bonus (--ent-coef > 0) was tried as a fix for that and turned out to be a
+high-variance gamble across seeds (99.7%, 0.0%, 55.3% mutual information in a
+3-seed rerun -- see Design notes in the README): untargeted, it destabilizes
+the *whole* joint action distribution, not just the message channel.
+
+--mi-coef (now the default, at 0.2) is a different, targeted fix:
+mi_ppo.py's MIBonusPPO adds an auxiliary loss (the RIM/IMSAT
+mutual-information-maximization regularizer) computed only from the
+speaker's message logits, pushing the message to be both confident given the
+input and diverse across the batch. Unlike the entropy bonus, this reached
+the full clean protocol (99.7% of max MI) on 3/3 random seeds, not 1/3 --
+see Design notes for the full comparison and mi_ppo.py for the derivation.
 """
 import argparse
 import os
 
 from bottleneck_policy import SpeakerListenerBottleneckPolicy
+from mi_ppo import MIBonusPPO
 from mpe2 import simple_speaker_listener_v4
-from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 
 from common.joint_env import JointPolicyEnv
@@ -30,14 +43,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--timesteps", type=int, default=300_000)
     parser.add_argument("--max-cycles", type=int, default=25)
-    parser.add_argument("--ent-coef", type=float, default=0.01,
-                         help="The bottleneck architecture alone (ent_coef=0.0) already forces the "
-                              "message to carry real target information -- 300k steps gets 55.3%% of "
-                              "max mutual information -- but it can settle for a deterministic protocol "
-                              "that only uses 2 of 3 message symbols (distinguishing one target from "
-                              "the other two, but not those two from each other), since that's already "
-                              "enough for decent reward. A small entropy bonus discourages settling for "
-                              "that partial equilibrium and gets 99.7%% -- see Design notes in the README.")
+    parser.add_argument("--ent-coef", type=float, default=0.0,
+                         help="Generic PPO entropy bonus over the whole joint action. Found to be an "
+                              "unreliable fix for the 2-of-3-message local optimum (high seed variance) "
+                              "-- see Design notes in the README. Defaults to off; --mi-coef is the "
+                              "more targeted alternative.")
+    parser.add_argument("--mi-coef", type=float, default=0.2,
+                         help="Coefficient for MIBonusPPO's message-only mutual-information auxiliary "
+                              "loss (see mi_ppo.py). 0.0 makes this identical to plain PPO. The default "
+                              "0.2 reached 99.7%% of max mutual information on 3/3 random seeds -- see "
+                              "Design notes in the README.")
     parser.add_argument("--hidden-dim", type=int, default=64)
     parser.add_argument("--seed", type=int, default=None,
                          help="Seeds network init, env resets during training, and action sampling "
@@ -68,8 +83,8 @@ def main():
         "listener_obs_dim": env.unwrapped.obs_dims[1],
         "hidden_dim": args.hidden_dim,
     }
-    model = PPO(
-        SpeakerListenerBottleneckPolicy, env, verbose=1, ent_coef=args.ent_coef,
+    model = MIBonusPPO(
+        SpeakerListenerBottleneckPolicy, env, verbose=1, ent_coef=args.ent_coef, mi_coef=args.mi_coef,
         policy_kwargs=policy_kwargs, tensorboard_log=args.tensorboard_log, seed=args.seed,
     )
     model.learn(total_timesteps=args.timesteps, callback=callback)

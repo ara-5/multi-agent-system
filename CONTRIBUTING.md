@@ -29,15 +29,13 @@ scripts consistent with that pattern so CI can smoke-test them too.
   `<task>/{train,evaluate,record_demo}.py` pattern, plus a
   `tools/export_policy_weights.py` + `tools/record_trajectories_*.py` pair to
   wire it into `web_demo/`, is a self-contained, well-scoped contribution.
-- `simple_speaker_listener` went through three architectures, and a multi-seed
-  rerun that overturned the first "it worked" conclusion, before reaching a
-  reliable (if partial) communication protocol (see
-  [Design notes](README.md#emergent-communication-design-notes) and
-  [Next steps](README.md#next-steps) for the still-open part: making the last
-  stretch to a full protocol reliable, not just achievable on a lucky seed) —
-  if you're looking for a similar "does the architecture even allow the thing
+- `simple_speaker_listener` went through five architectures/objectives, and a
+  multi-seed rerun that overturned one "it worked" conclusion along the way,
+  before reaching a reliable, full communication protocol on 3/3 seeds (see
+  [Design notes](README.md#emergent-communication-design-notes)) — if you're
+  looking for a similar "does the architecture/objective even allow the thing
   I'm testing for" bug elsewhere in the repo (e.g. in `simple_tag`'s
-  freeze-one-side training), that's a
+  freeze-one-side training, see [Next steps](README.md#next-steps)), that's a
   welcome kind of contribution.
 - Found a bug or a claim in the README that doesn't hold up? Open an issue —
   this repo tries to report results honestly (see the `simple_speaker_listener`
