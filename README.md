@@ -12,8 +12,9 @@ that the browser's computed action matches Python's, frame by frame.
 
 Multi-agent reinforcement learning (MARL): agents that learn cooperative,
 competitive, *and* communicative behavior through training, rather than
-following hand-written rules — plus the honest result when one of those didn't
-actually work (see [Demo: simple_speaker_listener](#demo-simple_speaker_listener-emergent-communication)).
+following hand-written rules — plus the honest, measured result when one of
+those only partially worked (see
+[Demo: simple_speaker_listener](#demo-simple_speaker_listener-emergent-communication)).
 
 **Stack:** [PettingZoo](https://pettingzoo.farama.org/) (multi-agent env API) +
 [SuperSuit](https://github.com/Farama-Foundation/SuperSuit) (env wrappers) +
@@ -33,7 +34,7 @@ actually work (see [Demo: simple_speaker_listener](#demo-simple_speaker_listener
   but can't see the target; they share one reward, so they need a communication
   protocol to succeed. Trained as a single joint policy (see
   [joint_env.py](#emergent-communication-simple_speaker_listener) below) — and,
-  spoiler, it mostly didn't work; see the honest results below.
+  spoiler, it only partially worked; see the honest, measured results below.
 
 ## Demo: simple_spread (cooperative)
 
@@ -81,23 +82,28 @@ that's why the table reports 20-episode means rather than a single run.
 
 ![reward curve](assets/comm_reward_curve.png)
 
-Reward (shared, negative listener-to-target distance) improves substantially,
-from roughly -38 to -15 over training. That alone would normally read as "the
-agents learned to communicate" — but it doesn't hold up:
+Reward (shared, negative listener-to-target distance) improves substantially
+over training. That alone would normally read as "the agents learned to
+communicate" — it doesn't fully hold up, though it's real progress over the
+first attempt:
 
 ![message vs. target confusion matrix](assets/comm_confusion_matrix.png)
 
-**Mutual information between the true target and the speaker's message is 0.0148
-bits — 0.9% of the 1.585-bit maximum.** In other words, the message is carrying
-essentially no information about the target; the listener isn't decoding a
-protocol, it's most likely converged on a generically useful policy (e.g. moving
-toward the landmarks' centroid, which beats undirected random movement on
-average without needing to know *which* landmark is correct). This is a known
-failure mode in emergent-communication RL: nothing in the setup forces the
-communication channel specifically to be used, so PPO is free to find any
-reward-improving policy, and a channel-agnostic one is often easier to discover
-than a true protocol. See [Design notes](#emergent-communication-design-notes)
-for what would likely fix this.
+**First attempt** (200k timesteps, default `ent_coef=0.0`): reward -38 → -15,
+mutual information between the true target and the speaker's message was
+**0.0148 bits — 0.9% of the 1.585-bit maximum.** Essentially no signal: the
+listener had most likely converged on a generically useful policy (e.g. moving
+toward the landmarks' centroid) rather than decoding anything.
+
+**After the fix** (1M timesteps, `ent_coef=0.02` — see
+[Design notes](#emergent-communication-design-notes) for why): reward improved
+further to a 20-episode mean of **-11.30 ± 7.64**, and mutual information rose
+to **0.2147 bits — 13.5% of max.** That's a real, quantifiable signal where
+there was none before — some messages now correlate with specific targets far
+more than chance — but it's still a noisy, partial protocol, not a clean
+one-message-per-target mapping. Longer training or curriculum would likely
+close more of the gap; this is reported as genuine (if incomplete) progress,
+not a solved result.
 
 ## Setup
 
@@ -164,10 +170,13 @@ outputs both agents' actions at once (a `MultiDiscrete` joint action space),
 so the two roles are trained simultaneously by construction.
 
 ```bash
-python train_comm.py --timesteps 200000 --out models/comm_joint_ppo
+python train_comm.py --out models/comm_joint_ppo
 ```
 
-This is centralized training *and* centralized execution (one policy needs both
+(Defaults to 1M timesteps and `ent_coef=0.02` — see
+[Design notes](#emergent-communication-design-notes) for why an entropy bonus
+and 5x the timesteps of the other two tasks were needed here.) This is
+centralized training *and* centralized execution (one policy needs both
 agents' observations at inference time too) — a real limitation compared to
 decentralized execution, but a reasonable trade for a fully-cooperative task
 where nothing is lost by not decentralizing.
@@ -265,35 +274,43 @@ than trying to assert on outcomes.
   to say anything, versus a single episode being roughly informative for
   `simple_spread`.
 - **A rising reward curve doesn't prove the thing you set out to test.**
-  `simple_speaker_listener`'s reward improved substantially (-38 → -15), which
-  would normally be reported as a win — but `analyze_communication.py` shows the
-  speaker's message carries ~1% of the mutual information it would need to encode
-  the target. The reward gain is real, but it's most likely the listener finding
-  a generically useful movement policy that doesn't require decoding anything,
-  not emergent communication. I only caught this because I built a metric to
-  check the actual claim (message ↔ target correspondence) instead of trusting
-  the reward curve alone — a reminder that in RL, the reward going up is
-  evidence for "the policy improved," never proof of *how* it improved.
-- **What would likely fix `simple_speaker_listener`, in priority order**: (1)
-  more timesteps — 200k may simply be short for this harder credit-assignment
-  problem (the reward signal has to propagate from listener behavior back
-  through the discrete message to the speaker's parameters, which is a longer
-  causal chain than either of the other two tasks); (2) an entropy or
-  diversity bonus specifically on the speaker's message distribution, so
-  using the channel is directly incentivized rather than incidental; (3)
-  curriculum — start with a smaller number of possible targets, or reduce
-  `max_cycles` so movement-only strategies have less time to close the gap
-  without communication.
+  `simple_speaker_listener`'s first-attempt reward improved substantially
+  (-38 → -15), which would normally be reported as a win — but
+  `analyze_communication.py` showed the speaker's message carried only ~1% of
+  the mutual information it would need to encode the target. The reward gain
+  was real, but most likely the listener finding a generically useful movement
+  policy that didn't require decoding anything. I only caught this because I
+  built a metric to check the actual claim (message ↔ target correspondence)
+  instead of trusting the reward curve alone.
+- **The fix (more timesteps + an entropy bonus) worked, partially.** 5x the
+  timesteps (1M) and `ent_coef=0.02` — which discourages the policy from
+  collapsing to a low-entropy, channel-ignoring solution early — raised mutual
+  information from 0.9% to 13.5% of the theoretical max. That's real,
+  quantifiable progress (some messages now correlate with specific targets far
+  more than chance), but it's still a noisy, partial protocol, not a clean
+  one-message-per-target mapping. Note `ent_coef` is a blunt instrument here:
+  SB3 applies it to the *entire* joint action distribution's entropy (speaker
+  message + listener movement together, since they're one `MultiDiscrete`
+  action space), not selectively to the speaker's channel — a more targeted
+  fix (e.g. an auxiliary loss that directly rewards message-target mutual
+  information, or curriculum on the number of targets) would likely close
+  more of the remaining gap.
+- **This is the clearest example in the repo of reward-curve-vs-reality**:
+  two training runs, same task, same eval script, and the honest metric
+  (mutual information) moved in a completely different pattern than reward
+  alone would have suggested — reward improved on both attempts, but only the
+  MI measurement shows *which* attempt actually made progress on the thing
+  that mattered.
 - CI runs tiny smoke tests (train + evaluate, all three tasks) plus the real
   unit test suite on every push — enough to catch import/shape/API-breakage
   regressions in under a couple of minutes, without needing a real GPU runner.
 
 ## Next steps
 
-- **Get `simple_speaker_listener` actually communicating** — see the priority
-  list above (more timesteps, a message-entropy bonus, or curriculum). This is
-  the most valuable open item: right now the task's headline claim
-  ("emergent communication") isn't yet backed by the mutual-information result.
+- **Push `simple_speaker_listener` from a partial (13.5% of max MI) to a clean
+  protocol** — a targeted mutual-information-based auxiliary loss or curriculum
+  on the number of targets, rather than the blunter entropy-coefficient fix
+  already applied. This is still the most valuable open item.
 - Swap PPO for another SB3 algorithm, or attempt true simultaneous self-play
   (both `simple_tag` roles improving together, e.g. via RLlib) instead of the
   freeze-one-side approach used here.

@@ -307,13 +307,15 @@
           <div class="label" id="mi-sub">&nbsp;</div>
         </div>
       </div>
-      <p style="margin-top:16px"><strong>Reward improved substantially (&minus;38 &rarr; &minus;15 during
-      training) &mdash; but that's not proof of communication.</strong> The confusion matrix above is measured
-      over 300 held-out episodes, and mutual information between the true target and the speaker's message
-      is <span class="callout" id="mi-callout">&hellip;</span> of the theoretical maximum. The listener most
-      likely learned a generically useful movement policy (e.g. heading toward the landmarks' centroid)
-      rather than decoding a real protocol. A rising reward curve is evidence the policy improved &mdash;
-      never proof of <em>how</em>.</p>
+      <p style="margin-top:16px"><strong>Two training attempts, same task &mdash; reward improved on
+      both, but mutual information tells a very different story.</strong> A first attempt (200k timesteps)
+      reached only 0.9% of max mutual information: essentially no signal, despite a reward curve that
+      looked like a win. After 5x the timesteps plus an entropy bonus (discouraging the policy from
+      collapsing to a channel-ignoring solution early), the model shown here reaches
+      <span class="callout" id="mi-callout">&hellip;</span> of the theoretical maximum &mdash; a real,
+      partial protocol, not a clean one-message-per-target mapping. The confusion matrix above is measured
+      over 300 held-out episodes. A rising reward curve is evidence the policy improved &mdash; only the
+      mutual-information measurement shows <em>whether that improvement was the thing being tested for</em>.</p>
     </div>
   </section>
 

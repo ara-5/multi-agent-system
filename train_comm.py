@@ -24,11 +24,13 @@ def make_env(max_cycles: int, monitor_file: str | None = None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--timesteps", type=int, default=200_000)
+    parser.add_argument("--timesteps", type=int, default=1_000_000)
     parser.add_argument("--max-cycles", type=int, default=25)
-    parser.add_argument("--ent-coef", type=float, default=0.0,
+    parser.add_argument("--ent-coef", type=float, default=0.02,
                          help="PPO entropy coefficient; >0 discourages premature convergence to a "
-                              "low-entropy (e.g. channel-ignoring) policy")
+                              "low-entropy (e.g. channel-ignoring) policy. 200k steps at the default "
+                              "0.0 gets ~0.9%% of max mutual information between target and message; "
+                              "1M steps at 0.02 gets ~13.5%% -- see Design notes in the README.")
     parser.add_argument("--out", default="models/comm_joint_ppo")
     parser.add_argument("--tensorboard-log", default=None)
     parser.add_argument("--monitor-log", default="logs/comm_monitor.csv")
