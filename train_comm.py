@@ -26,6 +26,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--timesteps", type=int, default=200_000)
     parser.add_argument("--max-cycles", type=int, default=25)
+    parser.add_argument("--ent-coef", type=float, default=0.0,
+                         help="PPO entropy coefficient; >0 discourages premature convergence to a "
+                              "low-entropy (e.g. channel-ignoring) policy")
     parser.add_argument("--out", default="models/comm_joint_ppo")
     parser.add_argument("--tensorboard-log", default=None)
     parser.add_argument("--monitor-log", default="logs/comm_monitor.csv")
@@ -47,7 +50,7 @@ def main():
         callback = WandbCallback(verbose=2)
 
     env = make_env(args.max_cycles, monitor_file=args.monitor_log)
-    model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=args.tensorboard_log)
+    model = PPO("MlpPolicy", env, verbose=1, ent_coef=args.ent_coef, tensorboard_log=args.tensorboard_log)
     model.learn(total_timesteps=args.timesteps, callback=callback)
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)

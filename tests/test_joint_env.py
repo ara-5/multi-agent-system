@@ -68,7 +68,7 @@ def test_step_splits_joint_action_and_flattens_result():
     env.reset()
     obs, reward, terminated, truncated, _info = env.step([1, 3])
 
-    assert env._env.last_step_actions == {"speaker_0": 1, "listener_0": 3}
+    assert env.pz_env.last_step_actions == {"speaker_0": 1, "listener_0": 3}
     assert list(obs) == [9.0, 9.0, 9.0, 8.0, 8.0, 8.0, 8.0, 8.0]
     assert reward == -3.5
     assert terminated is True  # listener_0 terminated -> any() is True

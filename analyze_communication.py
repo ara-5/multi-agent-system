@@ -6,6 +6,7 @@ diagonal-ish matrix means a consistent (if arbitrary) protocol emerged; a
 uniform/scattered matrix means the message carries no information.
 """
 import argparse
+import json
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +22,9 @@ def main():
     parser.add_argument("--episodes", type=int, default=200)
     parser.add_argument("--base-seed", type=int, default=0)
     parser.add_argument("--out", default="assets/comm_confusion_matrix.png")
+    parser.add_argument("--json-out", default=None,
+                         help="Optional path to also dump {confusion, mutual_info_bits, "
+                              "max_mutual_info_bits, episodes} as JSON")
     args = parser.parse_args()
 
     model = PPO.load(args.model)
@@ -70,6 +74,16 @@ def main():
     plt.tight_layout()
     plt.savefig(args.out, dpi=120)
     print(f"Saved confusion matrix to {args.out}")
+
+    if args.json_out:
+        with open(args.json_out, "w") as f:
+            json.dump({
+                "confusion": confusion.tolist(),
+                "mutual_info_bits": float(mutual_info),
+                "max_mutual_info_bits": float(max_mutual_info),
+                "episodes": args.episodes,
+            }, f)
+        print(f"Saved analysis JSON to {args.json_out}")
 
 
 if __name__ == "__main__":

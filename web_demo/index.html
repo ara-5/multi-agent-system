@@ -1,0 +1,632 @@
+<title>Agent Control Room</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+  :root {
+    --bg: #eef0f3;
+    --surface: #ffffff;
+    --panel: #f5f6f9;
+    --panel-line: #e2e5eb;
+    --text: #171b22;
+    --text-muted: #59626f;
+    --accent: #a8611e;
+    --accent-soft: #f3e3d2;
+    --border: #d7dbe1;
+    --good: #2e8b57;
+    --bad: #c0392b;
+    --shadow: 0 1px 2px rgba(23,27,34,0.06), 0 6px 20px rgba(23,27,34,0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1220;
+      --surface: #141b2c;
+      --panel: #0a0f1c;
+      --panel-line: #1c2438;
+      --text: #eef1f7;
+      --text-muted: #8a93a8;
+      --accent: #e3a54c;
+      --accent-soft: #3a2c15;
+      --border: #232c42;
+      --good: #57c58a;
+      --bad: #e5726c;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 10px 30px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1220;
+    --surface: #141b2c;
+    --panel: #0a0f1c;
+    --panel-line: #1c2438;
+    --text: #eef1f7;
+    --text-muted: #8a93a8;
+    --accent: #e3a54c;
+    --accent-soft: #3a2c15;
+    --border: #232c42;
+    --good: #57c58a;
+    --bad: #e5726c;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 10px 30px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Source Serif 4", Georgia, serif;
+    padding: 0 20px;
+    padding-block: 40px 64px;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  .mono { font-family: "Space Mono", ui-monospace, Menlo, monospace; }
+  h1, h2, h3 { font-family: "Space Mono", ui-monospace, monospace; text-wrap: balance; margin: 0; }
+  a { color: var(--accent); }
+
+  header.hero { margin-bottom: 36px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 10px; font-weight: 700;
+  }
+  h1 { font-size: clamp(28px, 5vw, 42px); font-weight: 700; letter-spacing: -0.01em; }
+  .thesis {
+    max-width: 62ch; color: var(--text-muted); font-size: 17px; line-height: 1.55;
+    margin-top: 14px;
+  }
+  .thesis strong { color: var(--text); font-weight: 600; }
+
+  nav.tabs {
+    display: flex; gap: 6px; margin: 28px 0 20px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border); padding-bottom: 0;
+  }
+  nav.tabs button {
+    font-family: "Space Mono", monospace; font-size: 13px; font-weight: 700;
+    background: none; border: none; color: var(--text-muted);
+    padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; letter-spacing: 0.02em;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  nav.tabs button:focus-visible, button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .stage {
+    display: grid; grid-template-columns: 1.25fr 1fr; gap: 20px;
+  }
+  @media (max-width: 720px) { .stage { grid-template-columns: 1fr; } }
+
+  .screen {
+    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .screen svg { display: block; width: 100%; height: auto; }
+
+  .side {
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card h3 {
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 12px; font-weight: 700;
+  }
+
+  .transport { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .transport button {
+    font-family: "Space Mono", monospace; font-size: 13px; font-weight: 700;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 11px; cursor: pointer; line-height: 1;
+  }
+  .transport button:hover { border-color: var(--accent); color: var(--accent); }
+  .transport .ep-label { font-size: 12px; color: var(--text-muted); margin-left: 4px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin-top: 10px; }
+
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; padding: 5px 0; border-bottom: 1px dashed var(--panel-line);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .k { color: var(--text-muted); font-family: "Space Mono", monospace; font-size: 12px; }
+  .stat-row .v { font-family: "Space Mono", monospace; font-weight: 700; }
+
+  .check-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 0; font-family: "Space Mono", monospace; }
+  .pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff;
+    flex-shrink: 0;
+  }
+  .pill.ok { background: var(--good); }
+  .pill.mismatch { background: var(--bad); }
+
+  .findings { margin-top: 22px; }
+  .findings p { font-size: 15.5px; line-height: 1.65; color: var(--text); max-width: 70ch; }
+  .findings p.muted { color: var(--text-muted); }
+  .callout {
+    display: inline-block; font-family: "Space Mono", monospace; font-weight: 700;
+    background: var(--accent-soft); color: var(--accent); border-radius: 6px;
+    padding: 2px 8px; font-size: 13px;
+  }
+
+  .confusion { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; margin-top: 14px; }
+  .confusion svg { flex-shrink: 0; }
+  .mi-readout { font-family: "Space Mono", monospace; }
+  .mi-readout .big { font-size: 30px; font-weight: 700; color: var(--accent); }
+  .mi-readout .label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+
+  footer {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--text-muted); display: flex; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px;
+  }
+  footer a { text-decoration: underline; }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">multi-agent-system &middot; live policy playback</div>
+    <h1>Agent Control Room</h1>
+    <p class="thesis">
+      Three trained PPO policies, replaying real recorded episodes from
+      <a href="https://pettingzoo.farama.org/" target="_blank" rel="noopener">PettingZoo's MPE2</a>
+      environments &mdash; while the <strong>exact same weights</strong>, exported from the trained models,
+      run inference live in this page's JavaScript. Every frame, the browser recomputes the action
+      independently and checks it against what Python actually did. This is not a recorded video.
+    </p>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-task="tag" class="active">Competition <span class="mono" style="opacity:.6">simple_tag</span></button>
+    <button data-task="spread">Cooperation <span class="mono" style="opacity:.6">simple_spread</span></button>
+    <button data-task="comm">Communication <span class="mono" style="opacity:.6">simple_speaker_listener</span></button>
+  </nav>
+
+  <!-- ============ TAG PANEL ============ -->
+  <section class="panel active" id="panel-tag">
+    <div class="stage">
+      <div class="screen"><svg id="svg-tag" viewBox="-1.3 -1.3 2.6 2.6"></svg></div>
+      <div class="side">
+        <div class="card">
+          <h3>Transport</h3>
+          <div class="transport">
+            <button data-act="playpause" data-task="tag">&#9654;&#65039; Play</button>
+            <button data-act="prevep" data-task="tag">&#9664; Ep</button>
+            <button data-act="nextep" data-task="tag">Ep &#9654;</button>
+            <span class="ep-label mono" id="eplabel-tag">Episode 1/5</span>
+          </div>
+          <input type="range" id="scrub-tag" min="0" max="25" value="0">
+        </div>
+        <div class="card">
+          <h3>Readout</h3>
+          <div class="stat-row"><span class="k">FRAME</span><span class="v" id="frame-tag">0</span></div>
+          <div class="stat-row"><span class="k">ADVERSARY REWARD (ep)</span><span class="v" id="rew-adv-tag">0.00</span></div>
+          <div class="stat-row"><span class="k">PREY REWARD (ep)</span><span class="v" id="rew-good-tag">0.00</span></div>
+        </div>
+        <div class="card">
+          <h3>Browser vs. Python Inference</h3>
+          <div id="checks-tag"></div>
+        </div>
+      </div>
+    </div>
+    <div class="legend" id="legend-tag"></div>
+    <div class="findings">
+      <p><span class="callout">trained &gt; random, ~3x</span> Across 20 seeded evaluation episodes, the
+      trained adversaries average <strong>28.5&ndash;33.0</strong> reward regardless of opponent, versus
+      <strong>10.5&ndash;15.0</strong> for random adversaries &mdash; and trained prey roughly halve their
+      penalty (&minus;5.9 to &minus;11.6) versus random prey (&minus;14.6 to &minus;23.1).</p>
+      <p class="muted">Reward is sparse and discrete here (&plusmn;10 per collision, decided within a 25-step
+      episode), so any single episode is closer to a coin flip than a smooth signal &mdash; the adversary and
+      prey were trained independently, one frozen while the other learned, since the two roles have
+      different observation spaces and opposing rewards.</p>
+    </div>
+  </section>
+
+  <!-- ============ SPREAD PANEL ============ -->
+  <section class="panel" id="panel-spread">
+    <div class="stage">
+      <div class="screen"><svg id="svg-spread" viewBox="-1.3 -1.3 2.6 2.6"></svg></div>
+      <div class="side">
+        <div class="card">
+          <h3>Transport</h3>
+          <div class="transport">
+            <button data-act="playpause" data-task="spread">&#9654;&#65039; Play</button>
+            <button data-act="prevep" data-task="spread">&#9664; Ep</button>
+            <button data-act="nextep" data-task="spread">Ep &#9654;</button>
+            <span class="ep-label mono" id="eplabel-spread">Episode 1/5</span>
+          </div>
+          <input type="range" id="scrub-spread" min="0" max="25" value="0">
+        </div>
+        <div class="card">
+          <h3>Readout</h3>
+          <div class="stat-row"><span class="k">FRAME</span><span class="v" id="frame-spread">0</span></div>
+          <div class="stat-row"><span class="k">TEAM REWARD (ep)</span><span class="v" id="rew-spread">0.00</span></div>
+        </div>
+        <div class="card">
+          <h3>Browser vs. Python Inference</h3>
+          <div id="checks-spread"></div>
+        </div>
+      </div>
+    </div>
+    <div class="legend" id="legend-spread"></div>
+    <div class="findings">
+      <p><span class="callout">&minus;66.4 &plusmn; 17.6</span> mean team reward over 20 evaluation episodes
+      (all 3 agents' shared reward summed across the episode), a real but modest improvement over an
+      untrained policy &mdash; this task's reward is dense and shaped, so most learning happens early, and one
+      shared PPO policy controls every agent via parameter sharing (they're homogeneous: same
+      observation and action space).</p>
+      <p class="muted">Note: the training reward curve in this repo's README tracks a <em>single</em> agent's
+      per-episode return (SuperSuit vectorizes each agent into its own slot), while this page &mdash; like
+      <code>evaluate.py</code> &mdash; sums the shared reward across all 3 agents, so it reads roughly 3&times;
+      larger in magnitude. Same policy, different accounting.</p>
+    </div>
+  </section>
+
+  <!-- ============ COMM PANEL ============ -->
+  <section class="panel" id="panel-comm">
+    <div class="stage">
+      <div class="screen"><svg id="svg-comm" viewBox="-1.3 -1.3 2.6 2.6"></svg></div>
+      <div class="side">
+        <div class="card">
+          <h3>Transport</h3>
+          <div class="transport">
+            <button data-act="playpause" data-task="comm">&#9654;&#65039; Play</button>
+            <button data-act="prevep" data-task="comm">&#9664; Ep</button>
+            <button data-act="nextep" data-task="comm">Ep &#9654;</button>
+            <span class="ep-label mono" id="eplabel-comm">Episode 1/5</span>
+          </div>
+          <input type="range" id="scrub-comm" min="0" max="25" value="0">
+        </div>
+        <div class="card">
+          <h3>Readout</h3>
+          <div class="stat-row"><span class="k">FRAME</span><span class="v" id="frame-comm">0</span></div>
+          <div class="stat-row"><span class="k">TARGET (ring)</span><span class="v" id="target-comm">&mdash;</span></div>
+          <div class="stat-row"><span class="k">SPEAKER MESSAGE</span><span class="v" id="message-comm">&mdash;</span></div>
+          <div class="stat-row"><span class="k">SHARED REWARD (ep)</span><span class="v" id="rew-comm">0.00</span></div>
+        </div>
+        <div class="card">
+          <h3>Browser vs. Python Inference</h3>
+          <div id="checks-comm"></div>
+        </div>
+      </div>
+    </div>
+    <div class="legend" id="legend-comm"></div>
+    <div class="findings">
+      <p class="muted">The listener's ring shows which landmark is <em>actually</em> the target &mdash; the
+      speaker is the only agent who can observe this. Watch whether the message reliably predicts it.</p>
+      <div class="confusion">
+        <svg id="svg-confusion" width="220" height="220" viewBox="0 0 220 220"></svg>
+        <div class="mi-readout">
+          <div class="label">Mutual information, target &harr; message</div>
+          <div class="big" id="mi-value">&hellip;</div>
+          <div class="label" id="mi-sub">&nbsp;</div>
+        </div>
+      </div>
+      <p style="margin-top:16px"><strong>Reward improved substantially (&minus;38 &rarr; &minus;15 during
+      training) &mdash; but that's not proof of communication.</strong> The confusion matrix above is measured
+      over 300 held-out episodes, and mutual information between the true target and the speaker's message
+      is <span class="callout" id="mi-callout">&hellip;</span> of the theoretical maximum. The listener most
+      likely learned a generically useful movement policy (e.g. heading toward the landmarks' centroid)
+      rather than decoding a real protocol. A rising reward curve is evidence the policy improved &mdash;
+      never proof of <em>how</em>.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>Weights extracted directly from the trained Stable-Baselines3 models; verified to reproduce
+      identical actions to Python on held-out rollouts before publishing this page.</span>
+    <a href="https://github.com/ara-5/multi-agent-system" target="_blank" rel="noopener">github.com/ara-5/multi-agent-system</a>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function matVecTanh(W, b, x) {
+    const out = new Array(W.length);
+    for (let i = 0; i < W.length; i++) {
+      let s = b[i];
+      const row = W[i];
+      for (let j = 0; j < row.length; j++) s += row[j] * x[j];
+      out[i] = Math.tanh(s);
+    }
+    return out;
+  }
+  function matVec(W, b, x) {
+    const out = new Array(W.length);
+    for (let i = 0; i < W.length; i++) {
+      let s = b[i];
+      const row = W[i];
+      for (let j = 0; j < row.length; j++) s += row[j] * x[j];
+      out[i] = s;
+    }
+    return out;
+  }
+  function forwardPolicy(weights, obs) {
+    let x = obs;
+    for (const layer of weights.hidden_layers) x = matVecTanh(layer.W, layer.b, x);
+    const logits = matVec(weights.action_layer.W, weights.action_layer.b, x);
+    const actions = [];
+    let i = 0;
+    for (const dim of weights.action_dims) {
+      let bestIdx = 0, bestVal = -Infinity;
+      for (let k = 0; k < dim; k++) { if (logits[i + k] > bestVal) { bestVal = logits[i + k]; bestIdx = k; } }
+      actions.push(bestIdx);
+      i += dim;
+    }
+    return actions;
+  }
+
+  const NS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs) {
+    const el = document.createElementNS(NS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+  function rgbOf(color) {
+    return `rgb(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)})`;
+  }
+
+  function drawGrid(svg) {
+    const grid = svgEl("g", { stroke: "var(--panel-line)", "stroke-width": "0.006" });
+    for (let x = -1.2; x <= 1.2; x += 0.3) {
+      grid.appendChild(svgEl("line", { x1: x, y1: -1.3, x2: x, y2: 1.3 }));
+    }
+    for (let y = -1.2; y <= 1.2; y += 0.3) {
+      grid.appendChild(svgEl("line", { x1: -1.3, y1: y, x2: 1.3, y2: y }));
+    }
+    svg.appendChild(grid);
+  }
+
+  function buildLegend(el, entities) {
+    el.innerHTML = "";
+    const seenKinds = {};
+    for (const name in entities) {
+      const info = entities[name];
+      if (seenKinds[info.kind]) continue;
+      seenKinds[info.kind] = true;
+      const span = document.createElement("span");
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = rgbOf(info.color);
+      span.appendChild(sw);
+      span.appendChild(document.createTextNode(info.kind));
+      el.appendChild(span);
+    }
+  }
+
+  // ---- Generic player for tag/spread (per-agent obs+actions) ----
+  function makePlayer(cfg) {
+    const svg = document.getElementById("svg-" + cfg.id);
+    const scrub = document.getElementById("scrub-" + cfg.id);
+    const epLabel = document.getElementById("eplabel-" + cfg.id);
+    const frameLabel = document.getElementById("frame-" + cfg.id);
+    const checksEl = document.getElementById("checks-" + cfg.id);
+    const playBtn = document.querySelector(`button[data-act=playpause][data-task=${cfg.id}]`);
+
+    let episodeIdx = 0;
+    let frameIdx = 0;
+    let playing = false;
+    let timer = null;
+
+    const episodes = cfg.data.episodes;
+
+    function currentEpisode() { return episodes[episodeIdx]; }
+
+    function render() {
+      const ep = currentEpisode();
+      const frame = ep.frames[frameIdx];
+      scrub.max = ep.frames.length - 1;
+      scrub.value = frameIdx;
+      epLabel.textContent = `Episode ${episodeIdx + 1}/${episodes.length}`;
+      frameLabel.textContent = `${frameIdx}/${ep.frames.length - 1}`;
+
+      svg.innerHTML = "";
+      drawGrid(svg);
+      for (const name in frame.positions) {
+        const info = cfg.data.entities[name];
+        const [x, y] = frame.positions[name];
+        svg.appendChild(svgEl("circle", {
+          cx: x, cy: -y, r: info.radius, fill: rgbOf(info.color),
+          stroke: "rgba(0,0,0,0.15)", "stroke-width": 0.006,
+        }));
+      }
+
+      cfg.onFrame(ep, frame, frameIdx, checksEl);
+    }
+
+    function tick() {
+      const ep = currentEpisode();
+      if (frameIdx >= ep.frames.length - 1) {
+        episodeIdx = (episodeIdx + 1) % episodes.length;
+        frameIdx = 0;
+      } else {
+        frameIdx++;
+      }
+      render();
+    }
+
+    function setPlaying(p) {
+      playing = p;
+      playBtn.innerHTML = playing ? "&#10074;&#10074; Pause" : "&#9654;&#65039; Play";
+      if (timer) clearInterval(timer);
+      if (playing) timer = setInterval(tick, 220);
+    }
+
+    playBtn.addEventListener("click", () => setPlaying(!playing));
+    document.querySelector(`button[data-act=prevep][data-task=${cfg.id}]`).addEventListener("click", () => {
+      episodeIdx = (episodeIdx - 1 + episodes.length) % episodes.length; frameIdx = 0; render();
+    });
+    document.querySelector(`button[data-act=nextep][data-task=${cfg.id}]`).addEventListener("click", () => {
+      episodeIdx = (episodeIdx + 1) % episodes.length; frameIdx = 0; render();
+    });
+    scrub.addEventListener("input", () => {
+      setPlaying(false);
+      frameIdx = parseInt(scrub.value, 10);
+      render();
+    });
+
+    render();
+    if (!REDUCE_MOTION && cfg.autoplay) setPlaying(true);
+
+    return { render, setPlaying };
+  }
+
+  function checkRow(label, pyAction, jsAction) {
+    const match = pyAction === jsAction;
+    return `<div class="check-row"><span class="pill ${match ? "ok" : "mismatch"}">${match ? "&#10003;" : "&#10007;"}</span>` +
+      `<span>${label}: python=${pyAction} &nbsp;browser=${jsAction}</span></div>`;
+  }
+
+  Promise.all([
+    fetch("data/trajectories_tag.json").then(r => r.json()),
+    fetch("data/weights_tag_adversary.json").then(r => r.json()),
+    fetch("data/weights_tag_good.json").then(r => r.json()),
+    fetch("data/trajectories_spread.json").then(r => r.json()),
+    fetch("data/weights_spread.json").then(r => r.json()),
+    fetch("data/trajectories_comm.json").then(r => r.json()),
+    fetch("data/weights_comm.json").then(r => r.json()),
+    fetch("data/analysis_comm.json").then(r => r.json()),
+  ]).then(([tagTraj, wAdv, wGood, spreadTraj, wSpread, commTraj, wComm, analysisComm]) => {
+
+    buildLegend(document.getElementById("legend-tag"), tagTraj.entities);
+    buildLegend(document.getElementById("legend-spread"), spreadTraj.entities);
+    buildLegend(document.getElementById("legend-comm"), commTraj.entities);
+
+    // ---------- TAG ----------
+    let cumAdv = 0, cumGood = 0;
+    makePlayer({
+      id: "tag", data: tagTraj, autoplay: true,
+      onFrame: (ep, frame, frameIdx, checksEl) => {
+        if (frameIdx === 0) { cumAdv = 0; cumGood = 0; }
+        let rows = "";
+        if (frame.actions) {
+          const prevObs = ep.frames[frameIdx - 1].obs;
+          for (const agent of tagTraj.agent_order) {
+            const w = agent.startsWith("adversary_") ? wAdv : wGood;
+            const predicted = forwardPolicy(w, prevObs[agent])[0];
+            rows += checkRow(agent, frame.actions[agent], predicted);
+          }
+        }
+        checksEl.innerHTML = rows || "<div class=\"check-row\">(initial frame)</div>";
+        if (frame.reward) {
+          let advSum = 0, goodSum = 0;
+          for (const a in frame.reward) { if (a.startsWith("adversary_")) advSum += frame.reward[a]; else goodSum += frame.reward[a]; }
+          cumAdv += advSum; cumGood += goodSum;
+        }
+        document.getElementById("rew-adv-tag").textContent = cumAdv.toFixed(2);
+        document.getElementById("rew-good-tag").textContent = cumGood.toFixed(2);
+      },
+    });
+
+    // ---------- SPREAD ----------
+    let cumSpread = 0;
+    makePlayer({
+      id: "spread", data: spreadTraj, autoplay: false,
+      onFrame: (ep, frame, frameIdx, checksEl) => {
+        if (frameIdx === 0) cumSpread = 0;
+        let rows = "";
+        if (frame.actions) {
+          const prevObs = ep.frames[frameIdx - 1].obs;
+          for (const agent of spreadTraj.agent_order) {
+            const predicted = forwardPolicy(wSpread, prevObs[agent])[0];
+            rows += checkRow(agent, frame.actions[agent], predicted);
+          }
+          cumSpread += frame.reward || 0;
+        }
+        checksEl.innerHTML = rows || "<div class=\"check-row\">(initial frame)</div>";
+        document.getElementById("rew-spread").textContent = cumSpread.toFixed(2);
+      },
+    });
+
+    // ---------- COMM ----------
+    let cumComm = 0;
+    makePlayer({
+      id: "comm", data: commTraj, autoplay: false,
+      onFrame: (ep, frame, frameIdx, checksEl) => {
+        if (frameIdx === 0) cumComm = 0;
+        document.getElementById("target-comm").textContent = "landmark " + ep.target_index;
+        document.getElementById("message-comm").textContent = frame.message === null ? "—" : frame.message;
+        let rows = "";
+        if (frame.message !== null && frame.message !== undefined) {
+          const prevObs = ep.frames[frameIdx - 1].obs;
+          const predicted = forwardPolicy(wComm, prevObs);
+          rows += checkRow("speaker msg", frame.message, predicted[0]);
+          cumComm += frame.reward || 0;
+        }
+        checksEl.innerHTML = rows || "<div class=\"check-row\">(initial frame)</div>";
+        document.getElementById("rew-comm").textContent = cumComm.toFixed(2);
+
+        // highlight target landmark with a ring
+        const svg = document.getElementById("svg-comm");
+        const targetName = "landmark " + ep.target_index;
+        const pos = frame.positions[targetName];
+        if (pos) {
+          svg.appendChild(svgEl("circle", {
+            cx: pos[0], cy: -pos[1], r: 0.09, fill: "none",
+            stroke: "var(--accent)", "stroke-width": 0.015,
+          }));
+        }
+      },
+    });
+
+    // ---- confusion matrix + mutual info ----
+    const conf = analysisComm.confusion;
+    const maxCount = Math.max(...conf.flat());
+    const svgConf = document.getElementById("svg-confusion");
+    const pad = 34, cell = (220 - pad - 10) / 3;
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        const v = conf[r][c];
+        const alpha = 0.12 + 0.75 * (v / maxCount);
+        const rect = svgEl("rect", {
+          x: pad + c * cell, y: pad + r * cell, width: cell - 3, height: cell - 3,
+          fill: `rgba(168, 97, 30, ${alpha.toFixed(2)})`, rx: 3,
+        });
+        svgConf.appendChild(rect);
+        const label = svgEl("text", {
+          x: pad + c * cell + (cell - 3) / 2, y: pad + r * cell + (cell - 3) / 2 + 4,
+          "text-anchor": "middle", "font-size": "13", "font-family": "Space Mono, monospace",
+          fill: "var(--text)",
+        });
+        label.textContent = v;
+        svgConf.appendChild(label);
+      }
+    }
+    for (let i = 0; i < 3; i++) {
+      const yl = svgEl("text", { x: pad - 8, y: pad + i * cell + (cell - 3) / 2 + 4, "text-anchor": "end", "font-size": "11", "font-family": "Space Mono, monospace", fill: "var(--text-muted)" });
+      yl.textContent = "t" + i;
+      svgConf.appendChild(yl);
+      const xl = svgEl("text", { x: pad + i * cell + (cell - 3) / 2, y: pad - 10, "text-anchor": "middle", "font-size": "11", "font-family": "Space Mono, monospace", fill: "var(--text-muted)" });
+      xl.textContent = "m" + i;
+      svgConf.appendChild(xl);
+    }
+
+    const pct = (analysisComm.mutual_info_bits / analysisComm.max_mutual_info_bits) * 100;
+    document.getElementById("mi-value").textContent = analysisComm.mutual_info_bits.toFixed(4) + " bits";
+    document.getElementById("mi-sub").textContent = pct.toFixed(1) + "% of " + analysisComm.max_mutual_info_bits.toFixed(3) + "-bit max · " + analysisComm.episodes + " episodes";
+    document.getElementById("mi-callout").textContent = pct.toFixed(1) + "%";
+
+    // ---- tabs ----
+    document.querySelectorAll("#tabs button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#tabs button").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById("panel-" + btn.dataset.task).classList.add("active");
+      });
+    });
+  }).catch(err => {
+    document.querySelector(".wrap").insertAdjacentHTML("beforeend",
+      `<p style="color:var(--bad)">Failed to load demo data: ${err}</p>`);
+  });
+})();
+</script>

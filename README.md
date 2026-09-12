@@ -1,10 +1,19 @@
 # multi-agent-system
 
 [![CI](https://github.com/ara-5/multi-agent-system/actions/workflows/ci.yml/badge.svg)](https://github.com/ara-5/multi-agent-system/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+[![Live demo](https://img.shields.io/badge/demo-live%20in--browser-e3a54c.svg)](https://claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff)
 
-Multi-agent reinforcement learning (MARL) scaffold: agents that learn cooperative
-*and* competitive behavior through training, rather than following hand-written
-rules.
+**[Try the live demo →](https://claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff)**
+Three trained policies running *live inference in your browser* — the actual
+exported neural network weights, not a recorded video — with a real-time check
+that the browser's computed action matches Python's, frame by frame.
+
+Multi-agent reinforcement learning (MARL): agents that learn cooperative,
+competitive, *and* communicative behavior through training, rather than
+following hand-written rules — plus the honest result when one of those didn't
+actually work (see [Demo: simple_speaker_listener](#demo-simple_speaker_listener-emergent-communication)).
 
 **Stack:** [PettingZoo](https://pettingzoo.farama.org/) (multi-agent env API) +
 [SuperSuit](https://github.com/Farama-Foundation/SuperSuit) (env wrappers) +
@@ -192,6 +201,27 @@ python record_demo_tag.py --adversary-model models/simple_tag_adversary \
 python record_demo_comm.py --model models/comm_joint_ppo --out assets/demo_comm.gif
 ```
 
+## Live demo (`web_demo/`)
+
+**[claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff](https://claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff)**
+
+`export_policy_weights.py` extracts a trained SB3 policy's weight matrices to
+JSON, and `record_trajectories*.py` records real rollouts (entity positions,
+observations, actions) frame by frame. `web_demo/index.html` reimplements the
+policy's forward pass (two `tanh` hidden layers + a linear action head — SB3's
+default `MlpPolicy` architecture) in ~30 lines of plain JavaScript, then, for
+every frame of a replayed rollout, recomputes the action from the recorded
+observation and checks it against what Python actually chose. Regenerate the
+data any of these scripts produce with:
+
+```bash
+python export_policy_weights.py --model models/simple_spread_ppo --out web_demo/data/weights_spread.json
+python record_trajectories.py --model models/simple_spread_ppo --out web_demo/data/trajectories_spread.json
+python record_trajectories_tag.py --out web_demo/data/trajectories_tag.json
+python record_trajectories_comm.py --model models/comm_joint_ppo --out web_demo/data/trajectories_comm.json
+python analyze_communication.py --episodes 300 --json-out web_demo/data/analysis_comm.json
+```
+
 ## Test
 
 ```bash
@@ -271,3 +301,24 @@ than trying to assert on outcomes.
   the Claude API) as a stretch/demo feature — worth revisiting once
   `simple_speaker_listener` actually has a real protocol for an LLM to
   describe; not much to interpret in a near-zero-mutual-information result.
+
+## Reproducibility
+
+```bash
+docker build -t multi-agent-system .
+docker run multi-agent-system
+```
+
+Or open the repo in VS Code with the Dev Containers extension (`.devcontainer/`)
+for a fully configured environment, no local Python setup needed.
+
+## Contributing
+
+Issues and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Good
+first places to start: the open items in
+[Next steps](#next-steps) above, or extending
+`web_demo/` with a fourth task.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=ara-5/multi-agent-system&type=Date)](https://star-history.com/#ara-5/multi-agent-system&Date)

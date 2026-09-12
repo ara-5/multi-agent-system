@@ -1,0 +1,10 @@
+{
+  "name": "multi-agent-system",
+  "image": "python:3.11-slim",
+  "postCreateCommand": "pip install -e '.[dev,wandb]'",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "charliermarsh.ruff"]
+    }
+  }
+}
