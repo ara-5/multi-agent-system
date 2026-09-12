@@ -13,8 +13,10 @@ that the browser's computed action matches Python's, frame by frame.
 Multi-agent reinforcement learning (MARL): agents that learn cooperative,
 competitive, *and* communicative behavior through training, rather than
 following hand-written rules — including the full debugging story behind the
-communicative one, which didn't work at first, and *why* (an architecture
-problem, not a training-budget one) before it did (see
+communicative one, which didn't work at first (an architecture problem, not a
+training-budget one), and then, after a fix that looked complete from a single
+run, didn't reliably work either — a multi-seed rerun is what actually caught
+that (see
 [Demo: simple_speaker_listener](#demo-simple_speaker_listener-emergent-communication)).
 
 **Stack:** [PettingZoo](https://pettingzoo.farama.org/) (multi-agent env API) +
@@ -36,8 +38,10 @@ problem, not a training-budget one) before it did (see
   protocol to succeed. Trained as a single joint policy over two independent
   sub-networks with an explicit information bottleneck (see
   [bottleneck_policy.py](#emergent-communication-simple_speaker_listener) below)
-  — and, spoiler, the first (more obvious) architecture didn't work, which is
-  more interesting than if it had; see the honest, measured results below.
+  — and, spoiler, the first (more obvious) architecture didn't work, the fix
+  for *that* only reliably half-worked, and finding out required rerunning
+  everything across multiple seeds instead of trusting one good result; see
+  the honest, measured results below.
 
 ## Project layout
 
