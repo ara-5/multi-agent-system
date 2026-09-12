@@ -45,3 +45,9 @@ jobs:
 
       - name: Evaluate simple_speaker_listener
         run: python comm/evaluate.py --model models/ci_comm --episodes 1
+
+      - name: Train simple_speaker_listener baseline architecture (tiny smoke test)
+        run: python comm/train_baseline.py --timesteps 3000 --out models/ci_comm_baseline --monitor-log logs/ci_comm_baseline_monitor.csv
+
+      - name: Evaluate simple_speaker_listener baseline architecture
+        run: python comm/evaluate.py --model models/ci_comm_baseline --episodes 1

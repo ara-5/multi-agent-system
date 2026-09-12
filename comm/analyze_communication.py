@@ -18,7 +18,7 @@ from common.joint_env import JointPolicyEnv
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="models/comm_joint_ppo")
+    parser.add_argument("--model", default="models/comm_ppo")
     parser.add_argument("--episodes", type=int, default=200)
     parser.add_argument("--base-seed", type=int, default=0)
     parser.add_argument("--out", default="assets/comm_confusion_matrix.png")

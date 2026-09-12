@@ -307,14 +307,19 @@
           <div class="label" id="mi-sub">&nbsp;</div>
         </div>
       </div>
-      <p style="margin-top:16px"><strong>Two training attempts, same task &mdash; reward improved on
-      both, but mutual information tells a very different story.</strong> A first attempt (200k timesteps)
-      reached only 0.9% of max mutual information: essentially no signal, despite a reward curve that
-      looked like a win. After 5x the timesteps plus an entropy bonus (discouraging the policy from
-      collapsing to a channel-ignoring solution early), the model shown here reaches
-      <span class="callout" id="mi-callout">&hellip;</span> of the theoretical maximum &mdash; a real,
-      partial protocol, not a clean one-message-per-target mapping. The confusion matrix above is measured
-      over 300 held-out episodes. A rising reward curve is evidence the policy improved &mdash; only the
+      <p style="margin-top:16px"><strong>Four attempts, same task &mdash; reward improved on all of them,
+      but mutual information tells the real story.</strong> A single shared network over both agents'
+      concatenated observations reached only 0.9% of max mutual information (200k steps), then 13.5% with
+      5x the training and an entropy bonus (1M steps) &mdash; because that architecture never has to route
+      information through the message: the same network that outputs the listener's move can just read the
+      speaker's target directly. Splitting the policy into two independent sub-networks &mdash; message
+      logits computed only from the speaker's observation, movement logits only from the listener's &mdash;
+      jumped to 55.3% immediately, but settled for a protocol using only 2 of 3 messages (distinguishing one
+      target from the other two, not those two from each other). Adding a small entropy bonus on top of the
+      restructured architecture reached the model shown here:
+      <span class="callout" id="mi-callout">&hellip;</span> of the theoretical maximum &mdash; a clean,
+      deterministic one-message-per-target protocol. The confusion matrix above is measured over 300
+      held-out episodes. A rising reward curve is evidence the policy improved &mdash; only the
       mutual-information measurement shows <em>whether that improvement was the thing being tested for</em>.</p>
     </div>
   </section>
@@ -352,7 +357,28 @@
     }
     return out;
   }
+  function argmax(logits) {
+    let bestIdx = 0, bestVal = -Infinity;
+    for (let k = 0; k < logits.length; k++) { if (logits[k] > bestVal) { bestVal = logits[k]; bestIdx = k; } }
+    return bestIdx;
+  }
+  // The comm model's speaker and listener are two independent sub-networks with
+  // no shared layer -- the message can only depend on the speaker's observation
+  // slice, and movement only on the listener's, so this mirrors that split
+  // exactly rather than running one trunk over the whole observation.
+  function forwardSpeakerListenerBottleneck(weights, obs) {
+    let sx = obs.slice(0, weights.speaker_dim);
+    for (const layer of weights.speaker_hidden_layers) sx = matVecTanh(layer.W, layer.b, sx);
+    const messageLogits = matVec(weights.message_head.W, weights.message_head.b, sx);
+
+    let lx = obs.slice(weights.speaker_dim);
+    for (const layer of weights.listener_hidden_layers) lx = matVecTanh(layer.W, layer.b, lx);
+    const movementLogits = matVec(weights.movement_head.W, weights.movement_head.b, lx);
+
+    return [argmax(messageLogits), argmax(movementLogits)];
+  }
   function forwardPolicy(weights, obs) {
+    if (weights.type === "speaker_listener_bottleneck") return forwardSpeakerListenerBottleneck(weights, obs);
     let x = obs;
     for (const layer of weights.hidden_layers) x = matVecTanh(layer.W, layer.b, x);
     const logits = matVec(weights.action_layer.W, weights.action_layer.b, x);

@@ -1,1 +1,1 @@
-{"confusion": [[39, 6, 44], [45, 53, 5], [43, 19, 46]], "mutual_info_bits": 0.21469813341278113, "max_mutual_info_bits": 1.584962500721156, "episodes": 300}
+{"confusion": [[89, 0, 0], [0, 103, 0], [0, 0, 108]], "mutual_info_bits": 1.5802264241886845, "max_mutual_info_bits": 1.584962500721156, "episodes": 300}

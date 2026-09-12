@@ -5,6 +5,14 @@ whether the message matches the target (see analyze_communication.py for the
 same question, measured properly via mutual information)."""
 import argparse
 import json
+import os
+import sys
+
+# A model trained via `python comm/train.py` pickles its custom policy class
+# under the bare module name "bottleneck_policy" (comm/'s own directory was
+# sys.path[0] at save time, not the repo root) -- so PPO.load needs that same
+# bare name importable here too, regardless of where this script is run from.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "comm"))
 
 from mpe2 import simple_speaker_listener_v4
 from stable_baselines3 import PPO
@@ -28,7 +36,7 @@ def entity_static_info(world):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="models/comm_joint_ppo")
+    parser.add_argument("--model", default="models/comm_ppo")
     parser.add_argument("--episodes", type=int, default=5)
     parser.add_argument("--base-seed", type=int, default=0)
     parser.add_argument("--max-cycles", type=int, default=25)

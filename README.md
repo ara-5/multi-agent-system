@@ -12,8 +12,9 @@ that the browser's computed action matches Python's, frame by frame.
 
 Multi-agent reinforcement learning (MARL): agents that learn cooperative,
 competitive, *and* communicative behavior through training, rather than
-following hand-written rules — plus the honest, measured result when one of
-those only partially worked (see
+following hand-written rules — including the full debugging story behind the
+communicative one, which didn't work at first, and *why* (an architecture
+problem, not a training-budget one) before it did (see
 [Demo: simple_speaker_listener](#demo-simple_speaker_listener-emergent-communication)).
 
 **Stack:** [PettingZoo](https://pettingzoo.farama.org/) (multi-agent env API) +
@@ -32,9 +33,11 @@ those only partially worked (see
 - **`simple_speaker_listener`** (cooperative, emergent communication) — a speaker
   that can see the target landmark but can't move, and a listener that can move
   but can't see the target; they share one reward, so they need a communication
-  protocol to succeed. Trained as a single joint policy (see
-  [joint_env.py](#emergent-communication-simple_speaker_listener) below) — and,
-  spoiler, it only partially worked; see the honest, measured results below.
+  protocol to succeed. Trained as a single joint policy over two independent
+  sub-networks with an explicit information bottleneck (see
+  [bottleneck_policy.py](#emergent-communication-simple_speaker_listener) below)
+  — and, spoiler, the first (more obvious) architecture didn't work, which is
+  more interesting than if it had; see the honest, measured results below.
 
 ## Project layout
 
@@ -42,7 +45,9 @@ those only partially worked (see
 common/       shared code: FixedOpponentWrapper (simple_tag), JointPolicyEnv (comm)
 spread/       simple_spread: train.py, evaluate.py, record_demo.py
 tag/          simple_tag: train.py, evaluate.py, record_demo.py
-comm/         simple_speaker_listener: train.py, evaluate.py, record_demo.py,
+comm/         simple_speaker_listener: train.py (the working, bottlenecked
+              architecture), train_baseline.py (the original, kept for the
+              record), bottleneck_policy.py, evaluate.py, record_demo.py,
               analyze_communication.py
 tools/        plot_rewards.py, export_policy_weights.py, record_trajectories_*.py
 web_demo/     the live in-browser demo (index.html + data/)
@@ -94,34 +99,44 @@ that's why the table reports 20-episode means rather than a single run.
 
 ## Demo: simple_speaker_listener (emergent communication)
 
-| Random policy (untrained) | Joint PPO policy (200k timesteps) |
+| Random policy (untrained) | Trained PPO policy (bottleneck architecture) |
 | --- | --- |
 | ![random policy](assets/demo_comm_random.gif) | ![trained policy](assets/demo_comm.gif) |
 
 ![reward curve](assets/comm_reward_curve.png)
 
 Reward (shared, negative listener-to-target distance) improves substantially
-over training. That alone would normally read as "the agents learned to
-communicate" — it doesn't fully hold up, though it's real progress over the
-first attempt:
+over training. On its own that would only be weak evidence the agents learned
+to *communicate* specifically — this task's actual result took two more
+architecture attempts and a real metric to get right:
 
 ![message vs. target confusion matrix](assets/comm_confusion_matrix.png)
 
-**First attempt** (200k timesteps, default `ent_coef=0.0`): reward -38 → -15,
-mutual information between the true target and the speaker's message was
-**0.0148 bits — 0.9% of the 1.585-bit maximum.** Essentially no signal: the
-listener had most likely converged on a generically useful policy (e.g. moving
-toward the landmarks' centroid) rather than decoding anything.
+**The result** (bottleneck architecture, 300k timesteps, `ent_coef=0.01`):
+mutual information between the true target and the speaker's message is
+**1.5802 bits — 99.7% of the 1.585-bit maximum.** The confusion matrix above
+(300 held-out episodes) is a clean diagonal: each target maps to its own
+message with essentially zero confusion — a real, near-deterministic protocol,
+not an incidental correlation.
 
-**After the fix** (1M timesteps, `ent_coef=0.02` — see
-[Design notes](#emergent-communication-design-notes) for why): reward improved
-further to a 20-episode mean of **-11.30 ± 7.64**, and mutual information rose
-to **0.2147 bits — 13.5% of max.** That's a real, quantifiable signal where
-there was none before — some messages now correlate with specific targets far
-more than chance — but it's still a noisy, partial protocol, not a clean
-one-message-per-target mapping. Longer training or curriculum would likely
-close more of the gap; this is reported as genuine (if incomplete) progress,
-not a solved result.
+That result took three attempts to get right, and the two that didn't work are
+exactly why this section exists — see
+[Design notes](#emergent-communication-design-notes) for the full story, but
+briefly:
+
+| Attempt | Architecture | Training | Mutual information |
+| --- | --- | --- | --- |
+| 1 | single shared network over both agents' obs | 200k steps, `ent_coef=0.0` | 0.9% of max |
+| 2 | same architecture | 1M steps, `ent_coef=0.02` | 13.5% of max |
+| 3 | independent speaker/listener sub-networks (bottleneck) | 300k steps, `ent_coef=0.0` | 55.3% of max (partial: 2 of 3 messages used) |
+| 4 | same bottleneck | 300k steps, `ent_coef=0.01` | **99.7% of max** |
+
+Attempts 1–2 improved reward while barely moving the metric that actually
+mattered, because that architecture never required the message to carry any
+information at all. Attempt 3 fixed the architecture and jumped immediately,
+but settled for a partial protocol. Attempt 4 added back a small entropy bonus
+— this time on an architecture where it could actually help — and closed the
+rest of the gap.
 
 ## Setup
 
@@ -187,17 +202,35 @@ target, so there's nothing for the listener to learn to decode). Instead,
 outputs both agents' actions at once (a `MultiDiscrete` joint action space),
 so the two roles are trained simultaneously by construction.
 
+That much was true from the start and is still true. What *didn't* work at
+first is using one shared network on top of that joint env — it has no reason
+to ever route target information through the message, since the same network
+that produces the listener's movement action can just read the speaker's raw
+observation directly. `comm/bottleneck_policy.py`'s
+`SpeakerListenerBottleneckPolicy` fixes this: it's still one PPO policy over
+the same joint env, but internally it's two independent sub-networks with no
+shared layer — message logits come only from the speaker's slice of the
+observation, movement logits only from the listener's slice — so the message
+is architecturally the *only* channel target information can travel through.
+The value function is still centralized (it sees everything), which is
+standard practice and doesn't weaken that guarantee.
+
 ```bash
-python comm/train.py --out models/comm_joint_ppo
+python comm/train.py --out models/comm_ppo
 ```
 
-(Defaults to 1M timesteps and `ent_coef=0.02` — see
-[Design notes](#emergent-communication-design-notes) for why an entropy bonus
-and 5x the timesteps of the other two tasks were needed here.) This is
-centralized training *and* centralized execution (one policy needs both
-agents' observations at inference time too) — a real limitation compared to
-decentralized execution, but a reasonable trade for a fully-cooperative task
-where nothing is lost by not decentralizing.
+(Defaults to 300k timesteps and `ent_coef=0.01`. The bottleneck architecture
+alone, with no entropy bonus, already reaches 55.3% of max mutual information
+in the same 300k steps — architecture was the main lever, not tuning — but it
+can settle for a protocol that only distinguishes 2 of 3 targets; the entropy
+bonus closes the rest of the gap. See
+[Design notes](#emergent-communication-design-notes) for the full story,
+including the original single-network approach, kept at
+`comm/train_baseline.py` for the record.) This is centralized training *and*
+centralized execution (one policy needs both agents' observations at inference
+time too) — a real limitation compared to decentralized execution, but a
+reasonable trade for a fully-cooperative task where nothing is lost by not
+decentralizing.
 
 ## Evaluate
 
@@ -205,8 +238,8 @@ where nothing is lost by not decentralizing.
 python spread/evaluate.py --model models/simple_spread_ppo --episodes 20
 python tag/evaluate.py --adversary-model models/simple_tag_adversary \
     --good-model models/simple_tag_good --episodes 20
-python comm/evaluate.py --model models/comm_joint_ppo --episodes 20
-python comm/analyze_communication.py --model models/comm_joint_ppo --episodes 300
+python comm/evaluate.py --model models/comm_ppo --episodes 20
+python comm/analyze_communication.py --model models/comm_ppo --episodes 300
 ```
 
 Runs N seeded episodes and prints a mean ± std reward summary — a single episode
@@ -225,7 +258,7 @@ baseline):
 python spread/record_demo.py --model models/simple_spread_ppo --out assets/demo_trained.gif
 python tag/record_demo.py --adversary-model models/simple_tag_adversary \
     --good-model models/simple_tag_good --out assets/demo_tag.gif
-python comm/record_demo.py --model models/comm_joint_ppo --out assets/demo_comm.gif
+python comm/record_demo.py --model models/comm_ppo --out assets/demo_comm.gif
 ```
 
 ## Live demo (`web_demo/`)
@@ -235,18 +268,22 @@ python comm/record_demo.py --model models/comm_joint_ppo --out assets/demo_comm.
 `tools/export_policy_weights.py` extracts a trained SB3 policy's weight matrices
 to JSON, and `tools/record_trajectories_*.py` records real rollouts (entity
 positions, observations, actions) frame by frame. `web_demo/index.html`
-reimplements the policy's forward pass (two `tanh` hidden layers + a linear
-action head — SB3's default `MlpPolicy` architecture) in ~30 lines of plain
-JavaScript, then, for every frame of a replayed rollout, recomputes the action
-from the recorded observation and checks it against what Python actually chose.
-Regenerate the data any of these scripts produce with:
+reimplements each policy's forward pass in plain JavaScript, then, for every
+frame of a replayed rollout, recomputes the action from the recorded
+observation and checks it against what Python actually chose. `simple_spread`
+and `simple_tag` use SB3's default `MlpPolicy` (two `tanh` hidden layers + a
+linear action head); `simple_speaker_listener` uses the bottleneck
+architecture's two independent sub-networks instead — the exporter detects
+which one a model uses and emits the matching JSON shape. Regenerate the data
+any of these scripts produce with:
 
 ```bash
 python tools/export_policy_weights.py --model models/simple_spread_ppo --out web_demo/data/weights_spread.json
 python tools/record_trajectories_spread.py --model models/simple_spread_ppo --out web_demo/data/trajectories_spread.json
 python tools/record_trajectories_tag.py --out web_demo/data/trajectories_tag.json
-python tools/record_trajectories_comm.py --model models/comm_joint_ppo --out web_demo/data/trajectories_comm.json
-python comm/analyze_communication.py --episodes 300 --json-out web_demo/data/analysis_comm.json
+python tools/export_policy_weights.py --model models/comm_ppo --out web_demo/data/weights_comm.json
+python tools/record_trajectories_comm.py --model models/comm_ppo --out web_demo/data/trajectories_comm.json
+python comm/analyze_communication.py --model models/comm_ppo --episodes 300 --json-out web_demo/data/analysis_comm.json
 ```
 
 ## Test
@@ -301,42 +338,79 @@ than trying to assert on outcomes.
   policy that didn't require decoding anything. I only caught this because I
   built a metric to check the actual claim (message ↔ target correspondence)
   instead of trusting the reward curve alone.
-- **The fix (more timesteps + an entropy bonus) worked, partially.** 5x the
-  timesteps (1M) and `ent_coef=0.02` — which discourages the policy from
-  collapsing to a low-entropy, channel-ignoring solution early — raised mutual
-  information from 0.9% to 13.5% of the theoretical max. That's real,
-  quantifiable progress (some messages now correlate with specific targets far
-  more than chance), but it's still a noisy, partial protocol, not a clean
-  one-message-per-target mapping. Note `ent_coef` is a blunt instrument here:
-  SB3 applies it to the *entire* joint action distribution's entropy (speaker
-  message + listener movement together, since they're one `MultiDiscrete`
-  action space), not selectively to the speaker's channel — a more targeted
-  fix (e.g. an auxiliary loss that directly rewards message-target mutual
-  information, or curriculum on the number of targets) would likely close
-  more of the remaining gap.
-- **This is the clearest example in the repo of reward-curve-vs-reality**:
-  two training runs, same task, same eval script, and the honest metric
-  (mutual information) moved in a completely different pattern than reward
-  alone would have suggested — reward improved on both attempts, but only the
-  MI measurement shows *which* attempt actually made progress on the thing
-  that mattered.
-- CI runs tiny smoke tests (train + evaluate, all three tasks) plus the real
-  unit test suite on every push — enough to catch import/shape/API-breakage
-  regressions in under a couple of minutes, without needing a real GPU runner.
+- **Tuning (more timesteps + an entropy bonus) helped, but only a little, and
+  that itself was the real signal.** 5x the timesteps (1M) and `ent_coef=0.02`
+  raised mutual information from 0.9% to 13.5% of the theoretical max — real,
+  measurable movement, but still far from a clean protocol, and the natural
+  next move (throw even more training or a bigger entropy bonus at it) would
+  have kept being a diminishing-returns grind. That itself is a clue: if a fix
+  aimed squarely at the problem barely moves the needle, the problem is
+  probably somewhere the fix can't reach.
+- **The actual bug was architectural, not a training-budget problem.**
+  `JointPolicyEnv` concatenates the speaker's observation (which contains the
+  goal) and the listener's observation into one vector, fed to one shared
+  network. Nothing about that architecture ever requires target information to
+  pass through the message: the same network that produces the listener's
+  movement logits has direct, unrestricted access to the speaker's raw
+  observation too, so gradient descent can just learn to read the goal
+  directly and route it to the movement action, leaving the message free to be
+  noise. `ent_coef` was fighting a shortcut that always existed — no amount of
+  it could ever close a gap that was architectural, not a matter of exploration.
+- **The fix: split the actor into two sub-networks with no shared layer**
+  (`comm/bottleneck_policy.py`). Message logits come from a small network that
+  only ever sees the speaker's observation slice; movement logits come from a
+  separate small network that only ever sees the listener's slice. The value
+  function stays centralized (sees everything) — a centralized critic with
+  decentralized actors is standard practice and doesn't weaken the guarantee
+  above. Implementing this means overriding SB3's `ActorCriticPolicy._build`
+  directly: the default implementation always inserts one trainable linear
+  layer across the *entire* latent vector to produce action logits, which
+  would silently recreate the same shortcut (that layer could route speaker
+  features into the movement columns) even with two "separate" sub-networks
+  feeding into it. The fix is to make each sub-network already emit its final,
+  separate logits, and replace that layer with `nn.Identity()` so nothing ever
+  remixes them.
+- **The architecture fix alone (still `ent_coef=0.0`) jumped to 55.3% of max
+  mutual information in the same 300k steps** — immediately, no tuning. But the
+  resulting protocol was a real, deterministic mapping that only used 2 of the
+  3 available messages: one message meant "target A", the other meant "not
+  target A" (ambiguous between the remaining two). That's a stable local
+  optimum, not noise — the listener still observes all 3 landmarks' raw
+  positions and can partially compensate for an ambiguous message, so there
+  was already-decent reward without ever needing the third message. Adding
+  back a small entropy bonus (`ent_coef=0.01`) — this time on an architecture
+  where it could actually do something — discouraged settling for that partial
+  equilibrium and closed the rest of the gap: **99.7% of max**, a clean
+  diagonal confusion matrix.
+- **This is the clearest example in the repo of reward-curve-vs-reality, and
+  of a fix only working once it targets the right layer**: four training runs,
+  same task, same eval script — reward improved on all of them, but the honest
+  metric (mutual information) shows that two of those runs were tuning the
+  wrong thing entirely, and the fix that actually worked was a ~40-line policy
+  architecture change, not more compute.
+- CI runs tiny smoke tests (train + evaluate, all four scripts across three
+  tasks — including both the working and the historical baseline
+  `simple_speaker_listener` architectures) plus the real unit test suite on
+  every push — enough to catch import/shape/API-breakage regressions in under
+  a couple of minutes, without needing a real GPU runner.
 
 ## Next steps
 
-- **Push `simple_speaker_listener` from a partial (13.5% of max MI) to a clean
-  protocol** — a targeted mutual-information-based auxiliary loss or curriculum
-  on the number of targets, rather than the blunter entropy-coefficient fix
-  already applied. This is still the most valuable open item.
+- A natural-language "mission control" or protocol-interpretation layer (via
+  the Claude API) — much more viable now than it would have been against the
+  original near-zero-mutual-information result: `simple_speaker_listener`'s
+  message ↔ target mapping is now a clean bijection (99.7% of max MI), so an
+  LLM narrating "the speaker is telling the listener to go to landmark 2" has
+  an actual protocol to describe, not noise.
 - Swap PPO for another SB3 algorithm, or attempt true simultaneous self-play
   (both `simple_tag` roles improving together, e.g. via RLlib) instead of the
   freeze-one-side approach used here.
-- A natural-language "mission control" or protocol-interpretation layer (via
-  the Claude API) as a stretch/demo feature — worth revisiting once
-  `simple_speaker_listener` actually has a real protocol for an LLM to
-  describe; not much to interpret in a near-zero-mutual-information result.
+- Try the same "does the architecture even allow the thing I'm testing for"
+  question on `simple_tag`: `FixedOpponentWrapper` is a reasonable two-stage
+  approximation of self-play, but it's worth checking whether the frozen-side
+  approach is systematically weaker than true simultaneous self-play, the same
+  way the original `simple_speaker_listener` architecture turned out to be
+  systematically incapable of real communication.
 
 ## Reproducibility
 
