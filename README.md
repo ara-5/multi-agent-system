@@ -647,6 +647,17 @@ is a minimal, ground-truth-labeled sandbox where you can find out your
 verification metric is confounded before you take it somewhere you can't
 check."
 
+**[`llm_agent_audit_pilot.md`](llm_agent_audit_pilot.md) takes this one step
+further**: the same real/causal-swap/placebo audit design, pointed at actual
+LLM agents (two independent Claude subagents, Speaker and Listener) instead
+of a trained PPO policy. The headline result there is a clean 9/9 across all
+three conditions -- a sharper separation between message-driven and
+noise-driven behavior than the RL policies in this README ever showed (whose
+placebo flip rates ran 33-63%). Read that file before citing it, though: it's
+an explicitly-labeled small pilot (n=3 per condition, one model, one
+cooperative task, not the adversarial steganography setting the papers above
+actually study), not a validated result on its own.
+
 ## Ablation: does the loss need the architecture? (multi-seed results)
 
 *(6 seeds/condition, 120k timesteps — a reduced budget from the 300k used
@@ -814,6 +825,33 @@ communication.
   approach is systematically weaker than true simultaneous self-play, the same
   way the original `simple_speaker_listener` architecture turned out to be
   systematically incapable of real communication.
+- **The adversarial version of `llm_agent_audit_pilot.md`** — that pilot
+  tested cooperative, explicit-protocol compliance; the actual
+  steganography/collusion-detection literature it's motivated by
+  (Motwani et al. 2024, arXiv:2410.03768) is about a Speaker *incentivized to
+  hide* information from a third overseer role while still conveying it to
+  the Listener. Building that three-role version and checking whether this
+  repo's real/causal/placebo audit design can detect the hidden channel is
+  the natural, much harder next step — not attempted here.
+- **A differentiable (Gumbel-softmax / straight-through) message channel**,
+  as an alternative to the REINFORCE-trained discrete message this repo uses
+  throughout. Scoped and then deliberately not attempted this round: doing it
+  correctly means either (a) writing and validating a custom SB3
+  `Distribution` for PPO's core loss (real risk of a subtly wrong `log_prob`
+  silently corrupting results without an obvious error), or (b) switching the
+  env to continuous actions, which changes the *movement* action space too,
+  not just the message — confounding exactly the comparison it would be
+  trying to make. Both are real engineering projects, not evening's work; see
+  the git history around this line for the reasoning in full before picking
+  it up.
+- **A JAX-based rewrite** (JaxMARL environments + a JAX-native PPO
+  implementation) for GPU-vectorized training — the actual bottleneck on
+  every multi-seed sweep in this README was CPU wall-clock time, not
+  algorithmic design. Worth it only if the seed/vocabulary/environment count
+  in future work grows enough to make hours-long CPU sweeps a recurring cost
+  rather than a one-time one; it's a rewrite of the training stack, not a
+  drop-in swap, given how much of `comm/*.py` subclasses
+  `stable_baselines3.common.policies.ActorCriticPolicy` directly.
 
 ## Reproducibility
 
