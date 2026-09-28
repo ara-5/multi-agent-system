@@ -1,0 +1,13 @@
+{
+  "policy": "bottleneck",
+  "objective": "eccles",
+  "seed": 1,
+  "reward_mean": -22.94,
+  "reward_std": 15.94,
+  "mutual_info_pct_of_max": 58.54856593095803,
+  "message_entropy_pct_of_max": 58.54856593104528,
+  "argmax_flip_rate_pct": 92.97999999999999,
+  "mean_l1_vs_zero": 1.9806618786573411,
+  "mean_kl_vs_zero": 9.483604309213161,
+  "final_passive_mi_diagnostic_pct": 42.12532579913905
+}

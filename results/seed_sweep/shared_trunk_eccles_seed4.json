@@ -1,0 +1,13 @@
+{
+  "policy": "shared_trunk",
+  "objective": "eccles",
+  "seed": 4,
+  "reward_mean": -20.48,
+  "reward_std": 13.81,
+  "mutual_info_pct_of_max": 0.5111710386972808,
+  "message_entropy_pct_of_max": 59.649068345641574,
+  "argmax_flip_rate_pct": 77.10000000000001,
+  "mean_l1_vs_zero": 1.973055793762207,
+  "mean_kl_vs_zero": 10.157970322665571,
+  "final_passive_mi_diagnostic_pct": 45.42940228035523
+}

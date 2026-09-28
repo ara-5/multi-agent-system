@@ -70,6 +70,49 @@ class _SpeakerListenerExtractor(nn.Module):
         movement_logits = self.movement_head(self.listener_net(listener_slice))
         return th.cat([message_logits, movement_logits], dim=1)
 
+    def movement_logits_with_message_override(self, features: th.Tensor, override: th.Tensor) -> th.Tensor:
+        """Recompute movement logits with the listener's received-message slice
+        (the last `override.shape[-1]` entries of its raw observation, per MPE's
+        simple_speaker_listener layout -- see web_demo/index.html's
+        listenerMovementForMessage, which does the identical override in JS for
+        the browser demo's "force the message" widget) replaced by `override`,
+        holding the rest of the listener's observation fixed. `override` can be
+        a one-hot (to test a specific forced message, as the web demo does) or
+        all-zero (Eccles et al. 2019's "zero inputs in place of the messages"
+        counterfactual, arXiv:1912.05676 Sec 3.2). Used by causal_intervention.py
+        (a quantitative, many-episode version of the web demo's single-frame
+        check) and eccles_ppo.py's positive-listening loss (Eq. 8 of the same
+        paper) -- both need to know whether movement is *caused* by the message,
+        which message<->target mutual information alone can't establish (see
+        Lowe et al. 2019, arXiv:1903.05168, on purely observational metrics)."""
+        listener_slice = features[:, self.speaker_dim :].clone()
+        num_override = override.shape[-1]
+        listener_slice[:, -num_override:] = override
+        return self.movement_head(self.listener_net(listener_slice))
+
+    def movement_logits_with_slice_override(
+        self, features: th.Tensor, start: int, end: int, values: th.Tensor
+    ) -> th.Tensor:
+        """General form of movement_logits_with_message_override: overrides
+        features[:, speaker_dim+start : speaker_dim+end] -- an arbitrary slice
+        of the LISTENER's own observation, not specifically the received-
+        message slice -- with `values`, holding everything else fixed.
+
+        Why this exists: a high argmax_flip_rate from
+        movement_logits_with_message_override alone doesn't prove the
+        listener is specifically message-sensitive -- it could just mean the
+        policy is generally brittle to *any* out-of-distribution perturbation
+        of its input, message or not (an off-distribution instability
+        confound, not a real causal-communication signal). This method lets
+        causal_intervention.py run the identical intervention procedure on a
+        *different*, non-message slice (e.g. the listener's own velocity) as
+        a placebo control: if perturbing an irrelevant slice produces a
+        comparably high flip rate, the message-slice result was measuring
+        general brittleness, not message-specific causal reliance."""
+        listener_slice = features[:, self.speaker_dim :].clone()
+        listener_slice[:, start:end] = values
+        return self.movement_head(self.listener_net(listener_slice))
+
     def forward_critic(self, features: th.Tensor) -> th.Tensor:
         return self.value_net_body(features)
 
@@ -120,3 +163,17 @@ class SpeakerListenerBottleneckPolicy(ActorCriticPolicy):
         message channel, not the full joint action."""
         speaker_slice = features[:, : self.speaker_obs_dim]
         return self.mlp_extractor.message_head(self.mlp_extractor.speaker_net(speaker_slice))
+
+    def movement_logits_with_message_override(self, features: th.Tensor, override: th.Tensor) -> th.Tensor:
+        """See _SpeakerListenerExtractor.movement_logits_with_message_override --
+        exposed here for callers (causal_intervention.py, eccles_ppo.py) that only
+        have the policy object, the same way message_logits() exposes the speaker
+        sub-network above."""
+        return self.mlp_extractor.movement_logits_with_message_override(features, override)
+
+    def movement_logits_with_slice_override(
+        self, features: th.Tensor, start: int, end: int, values: th.Tensor
+    ) -> th.Tensor:
+        """See _SpeakerListenerExtractor.movement_logits_with_slice_override --
+        exposed here the same way movement_logits_with_message_override is above."""
+        return self.mlp_extractor.movement_logits_with_slice_override(features, start, end, values)

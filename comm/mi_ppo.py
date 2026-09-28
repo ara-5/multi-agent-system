@@ -25,19 +25,18 @@ across the batch (high marginal entropy). Here x is the speaker's observation
 and y is the message; since this task's speaker observation *is* the target's
 one-hot color, this is directly an estimate of I(target; message), without
 needing to separately track target labels through the rollout buffer.
+
+The estimator itself (`message_mutual_info_estimate`) now lives in
+common/comm_audit.py, since mi_diagnostic_callback.py's passive, in-training
+logger needs the exact same computation for any objective (not just this
+one) -- see that module's docstring.
 """
 import torch as th
 from stable_baselines3 import PPO
 from stable_baselines3.common.utils import explained_variance
 from torch.nn import functional as F
 
-
-def message_mutual_info_estimate(message_logits: th.Tensor) -> th.Tensor:
-    probs = F.softmax(message_logits, dim=1)
-    conditional_entropy = -(probs * th.log(probs + 1e-12)).sum(dim=1).mean()
-    marginal_probs = probs.mean(dim=0)
-    marginal_entropy = -(marginal_probs * th.log(marginal_probs + 1e-12)).sum()
-    return marginal_entropy - conditional_entropy
+from common.comm_audit import message_mutual_info_estimate
 
 
 class MIBonusPPO(PPO):

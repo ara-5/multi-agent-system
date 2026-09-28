@@ -522,6 +522,253 @@ than trying to assert on outcomes.
   every push — enough to catch import/shape/API-breakage regressions in under
   a couple of minutes, without needing a real GPU runner.
 
+## Related work
+
+This repo's central finding above (a rising reward curve, and even a rising
+*correlational* mutual-information number, don't prove real communication
+happened) is not a new observation — it is essentially the thesis of **Lowe,
+Foerster, Boureau, Pineau & Dauphin, "On the Pitfalls of Measuring Emergent
+Communication," AAMAS 2019** ([arXiv:1903.05168](https://arxiv.org/abs/1903.05168)).
+Positioning what's here against the literature honestly, rather than
+overclaiming:
+
+- **Eccles, Bachrach, Lever, Lazaridou & Graepel, "Biases for Emergent
+  Communication in Multi-agent RL," NeurIPS 2019**
+  ([arXiv:1912.05676](https://arxiv.org/abs/1912.05676)) proposes two
+  inductive-bias losses — positive signalling (push the speaker's message to
+  have high mutual information with its input, via a target-conditional-entropy
+  loss rather than direct MI maximization, which they report has a poor loss
+  landscape) and positive listening (push the listener's action to depend on
+  the message, via an L1 divergence against a "message removed" counterfactual
+  policy). `comm/eccles_ppo.py` implements both losses directly from their
+  equations (Eq. 3 and Eq. 8), adapted from their multi-timestep recurrent
+  setting to this repo's single-step feedforward one, as a second,
+  independently-sourced baseline alongside `comm/mi_ppo.py`'s RIM/IMSAT loss —
+  not because this repo invented a competing idea, but so the two can be
+  compared under identical conditions.
+- **Rita, Michel, Chaabouni, Pietquin, Dupoux & Strub, "Emergent
+  Communication: Generalization and Overfitting in Lewis Games," NeurIPS 2022**
+  ([arXiv:2209.15342](https://arxiv.org/abs/2209.15342)) decomposes the Lewis-game
+  objective into an "information loss" (speaker unambiguity) and a
+  "co-adaptation loss" (listener optimality) — conceptually close to what
+  `comm/mi_ppo.py`'s auxiliary loss is doing. This means the core idea of a
+  channel-only informativeness loss is **not new**; if you're evaluating this
+  repo's novelty, don't take our word for it — read Rita et al.'s exact
+  decomposition against `mi_ppo.py`'s loss and judge how much daylight is
+  actually between them.
+- **Wang, He, Yu, Qiu, An & Rabinovich, "Learning Efficient Multi-agent
+  Communication: An Information Bottleneck Approach," ICML 2020**
+  ([arXiv:1911.06992](https://arxiv.org/abs/1911.06992)) uses an information
+  bottleneck in the *opposite* direction from this repo — minimizing message
+  entropy/MI for bandwidth compression, not maximizing message informativeness.
+  Useful context for why "information bottleneck" as a phrase doesn't uniquely
+  identify one technique in this space.
+- **Jaques, Lazaridou, Hughes, Gulcehre, Ortega, Strouse, Leibo & de Freitas,
+  "Social Influence as Intrinsic Motivation for Multi-Agent Deep RL," ICML 2019**
+  ([arXiv:1810.08647](https://arxiv.org/abs/1810.08647)) introduces the
+  counterfactual framework `comm/causal_intervention.py` builds on: reward (or,
+  here, just *measure*) an agent's influence by simulating alternate actions
+  and checking whether another agent's behavior changes.
+- **Krause, Perona & Gomes, "Discriminative Clustering by Regularized
+  Information Maximization," NeurIPS 2010**, and **Hu, Miyato, Tokui,
+  Matsumoto & Sugiyama, "Learning Discrete Representations via Information
+  Maximizing Self-Augmented Training," ICML 2017**
+  ([arXiv:1702.08720](https://arxiv.org/abs/1702.08720)) are RIM/IMSAT, the
+  unsupervised-clustering objective `comm/mi_ppo.py`'s loss borrows outright —
+  it was never designed for RL or emergent communication.
+- **Colas, Sigaud & Oudeyer, "How Many Random Seeds? Statistical Power
+  Analysis in Deep Reinforcement Learning Experiments"**
+  ([arXiv:1806.08295](https://arxiv.org/abs/1806.08295)) and **Henderson,
+  Islam, Bachman, Pineau, Precup & Meger, "Deep Reinforcement Learning that
+  Matters," AAAI 2018** ([arXiv:1709.06560](https://arxiv.org/abs/1709.06560))
+  are why `tools/run_seed_sweep.py` and `tools/aggregate_seed_sweep.py` exist
+  at all, and why this README no longer treats a 3-seed comparison as settled.
+
+**What we think is actually not already covered by the above**, and is what
+`comm/causal_intervention.py`, `comm/shared_trunk_mi_policy.py`, and
+`comm/mi_diagnostic_callback.py` exist to test: (1) whether a channel-only
+informativeness loss (RIM/IMSAT or Eccles-style) can inflate a *correlational*
+message↔target MI number even when the architecture doesn't force the
+listener to causally depend on the message — none of the papers above run
+that specific cross-check against a causal metric on the same trained models;
+and (2) whether a passive, zero-extra-cost, in-training MI estimate (logged
+for free from data the rollout buffer already has) reliably predicts the
+expensive post-hoc ground truth, as a practical early-warning tool. Both are
+genuinely testable, modest, tooling-shaped claims — not a new algorithm — and
+the honest answer, with real multi-seed numbers, is in the section below.
+
+### Why this matters beyond a toy game
+
+The question this repo keeps asking at increasing levels of skepticism --
+"does this signal mean what it looks like it means, or could it be a
+correlate/artifact instead?" -- is not just a MARL-research-hygiene concern.
+The same question, at higher stakes, is the subject of active 2024-2026 AI
+safety research on whether *LLM agents* are communicating in ways that evade
+oversight: **Motwani et al., "Secret Collusion among AI Agents: Multi-Agent
+Deception via Steganography," NeurIPS 2024**, **"Hidden in Plain Text:
+Emergence & Mitigation of Steganographic Collusion in LLMs"**
+([arXiv:2410.03768](https://arxiv.org/abs/2410.03768)), and **"Detecting
+Multi-Agent Collusion Through Multi-Agent Interpretability"**
+([arXiv:2604.01151](https://arxiv.org/abs/2604.01151)) all study exactly this
+problem for language-model agents: a communication channel between agents can
+look benign by every available surface metric while actually encoding
+something else. This repo is not a contribution to that literature -- it's a
+three-symbol Lewis game, not an LLM -- but it is a fully-controllable,
+fully-labeled minimal testbed for the *verification methodology* that
+problem needs: here, unlike in the LLM setting, we have ground-truth access
+to the true target, so we can check whether a "communication looks real"
+metric is actually trustworthy before ever trying to apply the same kind of
+check somewhere the ground truth is unknown. The finding in the next section
+-- that even a *causal*-intervention metric, not just a correlational one,
+turned out to need its own placebo control before it could be trusted --
+is a concrete, reproducible demonstration that this kind of verification is
+harder than it looks even in the easiest possible case. That's the honest
+scope of the relevance claim: not "solves LLM collusion detection," but "here
+is a minimal, ground-truth-labeled sandbox where you can find out your
+verification metric is confounded before you take it somewhere you can't
+check."
+
+## Ablation: does the loss need the architecture? (multi-seed results)
+
+*(6 seeds/condition, 120k timesteps — a reduced budget from the 300k used
+elsewhere in this README, chosen to fit a same-day compute window; see
+Limitations below. Full methodology: `tools/run_seed_sweep.py`,
+`tools/aggregate_seed_sweep.py`, `tools/placebo_audit_sweep.py`,
+`tools/aggregate_placebo_audit.py`. Raw per-seed data:
+`results/seed_sweep/`, `results/vocab_sweep_n*/`.)*
+
+### Part 1 — correlational MI: the architecture is doing essentially all the work
+
+| Architecture | Objective | MI (% of max) | 95% CI |
+| --- | --- | --- | --- |
+| bottleneck | none | 45.4% | [19.0, 72.3] |
+| bottleneck | entropy | 38.8% | [19.0, 58.6] |
+| bottleneck | mi | **99.7%** | [99.7, 99.7] |
+| bottleneck | eccles | 86.0% | [72.3, 99.7] |
+| shared_trunk | mi | **1.1%** | [0.4, 2.1] |
+| shared_trunk | eccles | **1.0%** | [0.5, 1.6] |
+
+The predicted result (mi_ppo.py's and eccles_ppo.py's docstrings) was that a
+channel-only auxiliary loss might inflate *correlational* MI even without the
+architectural bottleneck, by satisfying the loss on the speaker's side alone
+while the listener keeps reading the target shortcut directly. **That's not
+what happened.** On `shared_trunk`, both auxiliary losses leave MI at ~1% —
+statistically indistinguishable from random and a 98.6-point gap from the
+same loss on `bottleneck` (p<0.0001, n=6 vs n=6). The architecture isn't just
+necessary for the *listener* to causally depend on the message (the original
+hypothesis) — it's necessary for the loss to move the correlational metric
+at all. On the shared trunk, gradient from the much larger policy-gradient
+and value losses apparently dominates the tiny message-column readout before
+the auxiliary loss's small coefficient (0.1–0.2) can shape it into anything
+informative.
+
+### Part 2 — causal audit: a metric measuring "causal reliance" needs its own placebo control
+
+The first pass at this (see the vocabulary-scaling section below, and this
+repo's own earlier working notes) used `comm/causal_intervention.py`'s raw
+argmax-flip-rate as evidence of causal reliance on the message. That number
+turned out to be dangerously easy to over-read: forcing an alternative value
+into an *irrelevant* part of the listener's observation (its own velocity —
+`comm_audit.placebo_intervention_metrics`) produced a comparably high flip
+rate in every condition (33–62%), meaning a large share of the raw signal was
+general policy brittleness to any perturbation, not message-specific
+reliance. The trustworthy quantity is the placebo-corrected **message-specific
+signal** (message flip-rate minus placebo flip-rate):
+
+| Architecture | Objective | Signal (pp) | 95% CI | Distinguishable from placebo? |
+| --- | --- | --- | --- | --- |
+| bottleneck | none | 6.7 | [-2.2, 19.3] | No |
+| bottleneck | entropy | 8.7 | [0.4, 17.7] | Barely |
+| bottleneck | mi | 8.8 | [3.2, 16.2] | Yes |
+| bottleneck | eccles | 29.9 | [9.9, 47.3] | Yes |
+| shared_trunk | mi | 20.3 | [12.7, 27.8] | Yes |
+| shared_trunk | eccles | 43.9 | [26.1, 63.7] | Yes |
+
+Two things here, and the second is the one we didn't expect:
+
+**(a) Eccles' loss produces the strongest placebo-corrected causal signal of
+any bottleneck condition (29.9pp)** — which makes complete sense in
+hindsight, since positive-listening (Eq. 8) directly optimizes exactly this
+quantity, unlike the RIM/IMSAT loss, which only optimizes the speaker's side.
+A loss that trains for causal listening produces more of it than a loss that
+only trains for informativeness — a clean, mechanistically-explicable result
+that also validates the placebo-corrected metric is measuring something real.
+
+**(b) `shared_trunk` shows a real, statistically significant causal signal —
+larger than most bottleneck conditions — despite ~1% MI.** This is a third
+failure mode beyond what motivated this whole ablation: not "looks
+informative but isn't causal" (the original hypothesis, which the data
+rejects) but **"is causally load-bearing but isn't informative."** The
+listener's action measurably depends on the message-slice override more than
+on a placebo perturbation, even though that message carries essentially no
+information about the actual target. Mechanistically this likely reflects
+the shared trunk's fundamental entanglement rather than a "communication
+protocol" in any meaningful sense: unlike `bottleneck`'s intervention (which
+reruns only the listener's isolated sub-network), `shared_trunk`'s
+intervention reruns the *entire* joint network on a perturbed observation, so
+"causal effect of the message slice" and "generic sensitivity of a fully
+entangled network to one of its inputs" are harder to cleanly separate — see
+Limitations. Whatever the exact mechanism, the practical lesson stands: a
+channel can be causally "used" by a receiver without carrying real
+task-relevant information, which is a distinct — and arguably more
+deceptive, since it survives a causal check — failure mode from the one Lowe
+et al. 2019 describe for purely correlational metrics.
+
+### Part 3 — vocabulary scaling (bottleneck architecture, entropy vs. MI loss, 4 seeds)
+
+| num_landmarks | Condition | MI (% of max) | p (vs. other objective) |
+| --- | --- | --- | --- |
+| 3 | entropy | 59.0% | p<0.0001 |
+| 3 | mi | 99.7% | — |
+| 5 | entropy | 72.5% | p<0.0001 |
+| 5 | mi | 99.6% | — |
+| 8 | entropy | 77.3% | p<0.0001 |
+| 8 | mi | 97.5% | — |
+
+The MI loss's correlational advantage is real and significant at every
+vocabulary size tested, but **shrinks as vocabulary grows** (40.7-point gap
+at 3 symbols → 20.2 points at 8) — the fix that looked complete at 3 symbols
+is visibly losing ground as the task scales, exactly the open question the
+original single-seed exploration correctly flagged as untested.
+
+### Part 4 — the passive in-training diagnostic
+
+`comm/mi_diagnostic_callback.py`'s free, zero-extra-rollout MI estimate
+correlates strongly with the expensive post-hoc ground truth *within* a fixed
+vocabulary size (r=0.999/0.901/0.865 at 3/5/8 landmarks respectively), but
+much more weakly across the full, architecturally-diverse 36-run sweep
+(r=0.116) — and its correlation with the causal signal is consistently near
+zero or negative throughout. Read together with Part 1–2: the passive
+diagnostic is a good, free early-warning proxy for *whether the architecture
+lets the loss move MI at all*, but — like the raw correlational MI it
+estimates — it says nothing about whether that information is causally used,
+and (per Part 2) a channel scoring near-zero on this diagnostic can still be
+causally "listened to" for reasons that have nothing to do with successful
+communication.
+
+### Limitations
+
+- **6 seeds and a 120k-step budget** (vs. this README's other results at
+  300k) were chosen to fit a same-day compute window on a single 12-core CPU
+  machine, not because 6 is an adequate seed count — Colas et al. 2018
+  (arXiv:1806.08295) is explicit that RL comparisons this noisy typically
+  need more. Treat every p-value and CI above as suggestive, not conclusive,
+  until re-run at a larger budget.
+- **The causal audit isn't equally interpretable across architectures.**
+  `bottleneck`'s intervention isolates a genuinely separate listener
+  sub-network; `shared_trunk`'s reruns the whole entangled joint network, so
+  its causal-signal number answers a subtly different question ("does
+  perturbing this input slice change the joint network's output more than a
+  placebo slice does") than `bottleneck`'s does ("does perturbing this input
+  change *the isolated listener sub-network's* output"). Part 2(b)'s finding
+  should be read as "a real, placebo-controlled effect exists" rather than "a
+  directly architecture-comparable effect size."
+- **The placebo choice (the listener's own velocity, zeroed or negated) is
+  one reasonable control, not a validated calibration.** A magnitude-matched
+  or margin-aware version (reporting logit-gap changes, not just whether
+  argmax flips) would be a natural next refinement — see `comm_audit.py`'s
+  `placebo_intervention_metrics` docstring.
+
 ## Next steps
 
 - ~~Find a reliable way to close the remaining gap~~ — **done**: `comm/mi_ppo.py`'s

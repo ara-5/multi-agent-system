@@ -10,6 +10,7 @@ from mpe2 import simple_speaker_listener_v4
 from stable_baselines3 import PPO
 
 from common.joint_env import JointPolicyEnv
+from common.scaled_speaker_listener import parallel_env as scaled_parallel_env
 
 
 def main():
@@ -19,12 +20,20 @@ def main():
     parser.add_argument("--episodes", type=int, default=20)
     parser.add_argument("--base-seed", type=int, default=0)
     parser.add_argument("--max-cycles", type=int, default=25)
+    parser.add_argument("--num-landmarks", type=int, default=None,
+                         help="Must match what the model was trained with -- see train_ablation.py.")
     args = parser.parse_args()
 
     model = PPO.load(args.model) if args.model else None
-    env = JointPolicyEnv(lambda: simple_speaker_listener_v4.parallel_env(
-        max_cycles=args.max_cycles, continuous_actions=False
-    ))
+    if args.num_landmarks is None:
+        pz_env_fn = lambda: simple_speaker_listener_v4.parallel_env(
+            max_cycles=args.max_cycles, continuous_actions=False
+        )
+    else:
+        pz_env_fn = lambda: scaled_parallel_env(
+            num_landmarks=args.num_landmarks, max_cycles=args.max_cycles, continuous_actions=False
+        )
+    env = JointPolicyEnv(pz_env_fn)
 
     episode_rewards = []
     for episode in range(args.episodes):

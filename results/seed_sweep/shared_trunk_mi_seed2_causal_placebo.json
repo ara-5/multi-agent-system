@@ -1,0 +1,1 @@
+{"n_steps": 5000, "episodes": 200, "argmax_flip_rate": 0.7526, "mean_l1_vs_zero": 0.352413403771352, "mean_kl_vs_zero": 0.12412423586808145, "placebo_argmax_flip_rate": 0.5448}

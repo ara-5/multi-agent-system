@@ -1,0 +1,13 @@
+{
+  "policy": "bottleneck",
+  "objective": "none",
+  "seed": 0,
+  "reward_mean": -47.44,
+  "reward_std": 20.38,
+  "mutual_info_pct_of_max": 55.603264987387504,
+  "message_entropy_pct_of_max": 55.60326498745686,
+  "argmax_flip_rate_pct": 40.0,
+  "mean_l1_vs_zero": 0.028386220574378968,
+  "mean_kl_vs_zero": 0.0006634361743927001,
+  "final_passive_mi_diagnostic_pct": 3.255269145823136e-05
+}
