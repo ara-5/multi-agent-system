@@ -8,7 +8,10 @@
 **[Try the live demo →](https://claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff)**
 Three trained policies running *live inference in your browser* — the actual
 exported neural network weights, not a recorded video — with a real-time check
-that the browser's computed action matches Python's, frame by frame.
+that the browser's computed action matches Python's, frame by frame. A fourth
+tab, "Causal Audit," visualizes the placebo-corrected causal-intervention
+results below (message vs. placebo flip-rates per condition) and the
+LLM-agent pilot's contrasting result, interactively.
 
 Multi-agent reinforcement learning (MARL): agents that learn cooperative,
 competitive, *and* communicative behavior through training, rather than

@@ -174,6 +174,31 @@
   .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); margin-top: 10px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  .audit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+  @media (max-width: 720px) { .audit-grid { grid-template-columns: 1fr; } }
+  .audit-row { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .audit-row.highlight { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .audit-row-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; gap: 8px; }
+  .audit-cond { font-family: "Space Mono", monospace; font-weight: 700; font-size: 13.5px; }
+  .audit-mi-badge { font-family: "Space Mono", monospace; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .audit-mi-badge strong { color: var(--text); }
+  .audit-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .audit-bar-name { width: 58px; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; font-family: "Space Mono", monospace; }
+  .audit-bar-track { flex: 1; height: 14px; background: var(--panel); border-radius: 4px; overflow: hidden; }
+  .audit-bar-fill { height: 100%; border-radius: 4px; }
+  .audit-bar-fill.message { background: var(--accent); }
+  .audit-bar-fill.placebo { background: var(--text-muted); opacity: .5; }
+  .audit-bar-val { width: 44px; text-align: right; font-size: 12px; font-weight: 700; flex-shrink: 0; font-family: "Space Mono", monospace; }
+  .audit-signal { font-size: 12px; margin-top: 8px; font-family: "Space Mono", monospace; }
+  .audit-signal.ok { color: var(--good); }
+  .audit-signal.flat { color: var(--text-muted); }
+  .llm-box { margin-top: 20px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+  .llm-box h3 { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; font-weight: 700; }
+  .llm-compare { display: flex; gap: 20px; flex-wrap: wrap; margin: 12px 0; }
+  .llm-stat { font-family: "Space Mono", monospace; }
+  .llm-stat .big { font-size: 26px; font-weight: 700; color: var(--accent); }
+  .llm-stat .label { font-size: 11px; color: var(--text-muted); max-width: 22ch; }
 </style>
 
 <div class="wrap">
@@ -193,6 +218,7 @@
     <button data-task="tag" class="active">Competition <span class="mono" style="opacity:.6">simple_tag</span></button>
     <button data-task="spread">Cooperation <span class="mono" style="opacity:.6">simple_spread</span></button>
     <button data-task="comm">Communication <span class="mono" style="opacity:.6">simple_speaker_listener</span></button>
+    <button data-task="audit">Causal Audit <span class="mono" style="opacity:.6">placebo-controlled</span></button>
   </nav>
 
   <!-- ============ TAG PANEL ============ -->
@@ -347,6 +373,129 @@
         depending on the message, not just navigating by landmark position alone.</p>
         <div class="hijack-row" id="hijack-row"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ CAUSAL AUDIT PANEL ============ -->
+  <section class="panel" id="panel-audit">
+    <p class="thesis" style="max-width:72ch">
+      Does the listener's move <em>causally</em> depend on the message, or does an
+      apparently message-driven policy just look that way because it's sensitive to
+      <em>any</em> input change? The "force the message" widget on the Communication
+      tab swaps the message slot and checks whether the predicted move flips &mdash;
+      but a small MLP can be brittle to noise generally, not just to the message.
+      This panel adds the control that question needs: the same perturbation
+      strength applied to an <strong>irrelevant</strong> observation slice (the
+      listener's own velocity) instead of the message. The gap between the two flip
+      rates &mdash; not the raw message flip rate alone &mdash; is the trustworthy
+      number. 6 seeds per condition, bootstrap 95% CIs, evaluated on held-out
+      episodes via <code>comm/causal_intervention.py</code>.
+    </p>
+
+    <div class="audit-grid">
+      <div class="audit-row">
+        <div class="audit-row-head">
+          <span class="audit-cond">bottleneck / none</span>
+          <span class="audit-mi-badge">correlational MI <strong>45.4%</strong></span>
+        </div>
+        <div class="audit-bar-row"><span class="audit-bar-name">message</span><div class="audit-bar-track"><div class="audit-bar-fill message" style="width:67.4%"></div></div><span class="audit-bar-val">67.4%</span></div>
+        <div class="audit-bar-row"><span class="audit-bar-name">placebo</span><div class="audit-bar-track"><div class="audit-bar-fill placebo" style="width:60.7%"></div></div><span class="audit-bar-val">60.7%</span></div>
+        <div class="audit-signal flat">signal +6.7pp &middot; 95% CI [&minus;2.2, 19.3] &mdash; not distinguishable from placebo noise</div>
+      </div>
+
+      <div class="audit-row">
+        <div class="audit-row-head">
+          <span class="audit-cond">bottleneck / entropy</span>
+          <span class="audit-mi-badge">correlational MI <strong>38.8%</strong></span>
+        </div>
+        <div class="audit-bar-row"><span class="audit-bar-name">message</span><div class="audit-bar-track"><div class="audit-bar-fill message" style="width:70.2%"></div></div><span class="audit-bar-val">70.2%</span></div>
+        <div class="audit-bar-row"><span class="audit-bar-name">placebo</span><div class="audit-bar-track"><div class="audit-bar-fill placebo" style="width:61.6%"></div></div><span class="audit-bar-val">61.6%</span></div>
+        <div class="audit-signal ok">signal +8.7pp &middot; 95% CI [0.4, 17.7] &mdash; real, but barely</div>
+      </div>
+
+      <div class="audit-row">
+        <div class="audit-row-head">
+          <span class="audit-cond">bottleneck / mi</span>
+          <span class="audit-mi-badge">correlational MI <strong>99.7%</strong></span>
+        </div>
+        <div class="audit-bar-row"><span class="audit-bar-name">message</span><div class="audit-bar-track"><div class="audit-bar-fill message" style="width:63.6%"></div></div><span class="audit-bar-val">63.6%</span></div>
+        <div class="audit-bar-row"><span class="audit-bar-name">placebo</span><div class="audit-bar-track"><div class="audit-bar-fill placebo" style="width:54.8%"></div></div><span class="audit-bar-val">54.8%</span></div>
+        <div class="audit-signal ok">signal +8.8pp &middot; 95% CI [3.2, 16.2] &mdash; real signal</div>
+      </div>
+
+      <div class="audit-row">
+        <div class="audit-row-head">
+          <span class="audit-cond">bottleneck / eccles</span>
+          <span class="audit-mi-badge">correlational MI <strong>86.0%</strong></span>
+        </div>
+        <div class="audit-bar-row"><span class="audit-bar-name">message</span><div class="audit-bar-track"><div class="audit-bar-fill message" style="width:82.1%"></div></div><span class="audit-bar-val">82.1%</span></div>
+        <div class="audit-bar-row"><span class="audit-bar-name">placebo</span><div class="audit-bar-track"><div class="audit-bar-fill placebo" style="width:52.2%"></div></div><span class="audit-bar-val">52.2%</span></div>
+        <div class="audit-signal ok">signal +29.9pp &middot; 95% CI [9.9, 47.3] &mdash; strongest signal of any condition</div>
+      </div>
+
+      <div class="audit-row highlight">
+        <div class="audit-row-head">
+          <span class="audit-cond">shared_trunk / mi</span>
+          <span class="audit-mi-badge">correlational MI <strong>1.1%</strong></span>
+        </div>
+        <div class="audit-bar-row"><span class="audit-bar-name">message</span><div class="audit-bar-track"><div class="audit-bar-fill message" style="width:74.5%"></div></div><span class="audit-bar-val">74.5%</span></div>
+        <div class="audit-bar-row"><span class="audit-bar-name">placebo</span><div class="audit-bar-track"><div class="audit-bar-fill placebo" style="width:54.3%"></div></div><span class="audit-bar-val">54.3%</span></div>
+        <div class="audit-signal ok">signal +20.3pp &middot; 95% CI [12.7, 27.8] &mdash; real, and bigger than bottleneck/mi's</div>
+      </div>
+
+      <div class="audit-row highlight">
+        <div class="audit-row-head">
+          <span class="audit-cond">shared_trunk / eccles</span>
+          <span class="audit-mi-badge">correlational MI <strong>1.0%</strong></span>
+        </div>
+        <div class="audit-bar-row"><span class="audit-bar-name">message</span><div class="audit-bar-track"><div class="audit-bar-fill message" style="width:77.0%"></div></div><span class="audit-bar-val">77.0%</span></div>
+        <div class="audit-bar-row"><span class="audit-bar-name">placebo</span><div class="audit-bar-track"><div class="audit-bar-fill placebo" style="width:33.2%"></div></div><span class="audit-bar-val">33.2%</span></div>
+        <div class="audit-signal ok">signal +43.9pp &middot; 95% CI [26.1, 63.7] &mdash; largest gap in the whole sweep</div>
+      </div>
+    </div>
+
+    <div class="findings" style="margin-top:22px">
+      <p><span class="callout">a third failure mode</span> The two highlighted
+      <code>shared_trunk</code> conditions score barely above chance on correlational
+      mutual information (&sim;1%: the message tells you almost nothing about which
+      landmark is the real target) &mdash; and yet their placebo-corrected causal
+      signal is <em>larger</em> than every bottleneck condition except
+      <code>eccles</code>, including significantly larger than <code>bottleneck/mi</code>
+      itself (paired bootstrap, p=0.034). The listener's move really does depend on
+      whatever the message happens to be &mdash; the channel is causally load-bearing
+      &mdash; it just isn't carrying the target information it's supposed to. That's
+      distinct from both "no channel" (<code>bottleneck/none</code>'s signal isn't
+      even distinguishable from placebo noise) and "clean protocol"
+      (<code>bottleneck/mi</code> at 99.7% correlational MI): a policy can rely on its
+      communication channel while that channel is nearly uninformative about the
+      task, and the two facts only become visible using different tools &mdash; MI
+      catches the second, causal-intervention-with-a-placebo-control catches the
+      first.</p>
+    </div>
+
+    <div class="llm-box">
+      <h3>Same audit, pointed at LLM agents instead of a trained policy</h3>
+      <p style="font-size:14px;line-height:1.6;margin:0 0 4px">
+        A small pilot (n=3 per condition, Claude Haiku, one cooperative codebook task)
+        ran the identical real / causal-swap / placebo design on two independent LLM
+        subagents instead of a PPO policy.
+      </p>
+      <div class="llm-compare">
+        <div class="llm-stat"><div class="big">9/9</div><div class="label">causal-swap trials followed the swapped code, not the true target</div></div>
+        <div class="llm-stat"><div class="big">0%</div><div class="label">placebo-induced answer changes (vs. 33&ndash;61% placebo flip-rate above, for the RL policies)</div></div>
+      </div>
+      <p style="font-size:13.5px;line-height:1.6;color:var(--text-muted);margin:8px 0 0">
+        The likely explanation isn't "LLMs communicate better" &mdash; it's substrate:
+        an opaque MLP shaped purely by optimization pressure can be pushed across a
+        decision boundary by <em>any</em> sufficiently large perturbation, while an
+        LLM applying an explicitly stated symbolic rule can trivially tell "the code"
+        from "an unrelated fact about France." A causal-intervention audit's need for
+        a placebo control isn't a fixed property of the method &mdash; it depends on
+        whether the system being audited has explicit, inspectable structure to lean
+        on. Full transcripts, methodology, and honestly-scoped limitations (n=3, one
+        model, cooperative not adversarial) are in
+        <a href="https://github.com/ara-5/multi-agent-system/blob/main/llm_agent_audit_pilot.md" target="_blank" rel="noopener">llm_agent_audit_pilot.md</a>.
+      </p>
     </div>
   </section>
 
