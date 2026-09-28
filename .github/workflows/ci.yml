@@ -12,68 +12,70 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          version: "latest"
 
+      # --frozen fails the build instead of silently re-resolving if pyproject.toml
+      # and the committed uv.lock ever drift apart.
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: uv sync --extra dev --frozen
 
       - name: Lint
-        run: ruff check .
+        run: uv run ruff check .
 
       - name: Unit tests
-        run: pytest tests/ -v
+        run: uv run pytest tests/ -v
 
       - name: Train simple_spread (tiny smoke test)
-        run: python spread/train.py --timesteps 4000 --num-vec-envs 2 --out models/ci_smoke_test
+        run: uv run spread/train.py --timesteps 4000 --num-vec-envs 2 --out models/ci_smoke_test
 
       - name: Evaluate simple_spread
-        run: python spread/evaluate.py --model models/ci_smoke_test --episodes 1
+        run: uv run spread/evaluate.py --model models/ci_smoke_test --episodes 1
 
       - name: Train simple_tag adversary (tiny smoke test)
-        run: python tag/train.py --role adversary --timesteps 3000 --num-vec-envs 2 --out models/ci_tag_adv
+        run: uv run tag/train.py --role adversary --timesteps 3000 --num-vec-envs 2 --out models/ci_tag_adv
 
       - name: Train simple_tag good vs. trained adversary (tiny smoke test)
-        run: python tag/train.py --role good --opponent-model models/ci_tag_adv --timesteps 3000 --num-vec-envs 2 --out models/ci_tag_good
+        run: uv run tag/train.py --role good --opponent-model models/ci_tag_adv --timesteps 3000 --num-vec-envs 2 --out models/ci_tag_good
 
       - name: Evaluate simple_tag
-        run: python tag/evaluate.py --adversary-model models/ci_tag_adv --good-model models/ci_tag_good --episodes 1
+        run: uv run tag/evaluate.py --adversary-model models/ci_tag_adv --good-model models/ci_tag_good --episodes 1
 
       - name: Train simple_speaker_listener (tiny smoke test)
-        run: python comm/train.py --timesteps 3000 --out models/ci_comm --monitor-log logs/ci_comm_monitor.csv
+        run: uv run comm/train.py --timesteps 3000 --out models/ci_comm --monitor-log logs/ci_comm_monitor.csv
 
       - name: Evaluate simple_speaker_listener
-        run: python comm/evaluate.py --model models/ci_comm --episodes 1
+        run: uv run comm/evaluate.py --model models/ci_comm --episodes 1
 
       - name: Train simple_speaker_listener baseline architecture (tiny smoke test)
-        run: python comm/train_baseline.py --timesteps 3000 --out models/ci_comm_baseline --monitor-log logs/ci_comm_baseline_monitor.csv
+        run: uv run comm/train_baseline.py --timesteps 3000 --out models/ci_comm_baseline --monitor-log logs/ci_comm_baseline_monitor.csv
 
       - name: Evaluate simple_speaker_listener baseline architecture
-        run: python comm/evaluate.py --model models/ci_comm_baseline --episodes 1
+        run: uv run comm/evaluate.py --model models/ci_comm_baseline --episodes 1
 
       - name: Train ablation grid, one tiny run per (policy, objective) cell (smoke test)
         run: |
           for policy in bottleneck shared_trunk; do
             for objective in none entropy mi eccles; do
-              python comm/train_ablation.py --policy "$policy" --objective "$objective" \
+              uv run comm/train_ablation.py --policy "$policy" --objective "$objective" \
                 --timesteps 3000 --out "models/ci_ablation_${policy}_${objective}" \
                 --mi-diagnostic-log "logs/ci_ablation_${policy}_${objective}_mi.csv"
             done
           done
 
       - name: Run causal_intervention.py (with placebo control) on a bottleneck model (smoke test)
-        run: python comm/causal_intervention.py --model models/ci_ablation_bottleneck_mi --episodes 2
+        run: uv run comm/causal_intervention.py --model models/ci_ablation_bottleneck_mi --episodes 2
 
       - name: Run causal_intervention.py (with placebo control) on a shared_trunk model (smoke test)
-        run: python comm/causal_intervention.py --model models/ci_ablation_shared_trunk_mi --episodes 2
+        run: uv run comm/causal_intervention.py --model models/ci_ablation_shared_trunk_mi --episodes 2
 
       - name: Run analyze_communication.py on one ablation model (smoke test)
-        run: python comm/analyze_communication.py --model models/ci_ablation_bottleneck_mi --episodes 2 --out /tmp/ci_confusion.png
+        run: uv run comm/analyze_communication.py --model models/ci_ablation_bottleneck_mi --episodes 2 --out /tmp/ci_confusion.png
 
       - name: Train + evaluate on the vocabulary-scaled env, 5 landmarks (smoke test)
         run: |
-          python comm/train_ablation.py --policy bottleneck --objective mi --num-landmarks 5 \
+          uv run comm/train_ablation.py --policy bottleneck --objective mi --num-landmarks 5 \
             --timesteps 3000 --out models/ci_scaled5
-          python comm/analyze_communication.py --model models/ci_scaled5 --num-landmarks 5 --episodes 2 --out /tmp/ci_scaled5.png
-          python comm/causal_intervention.py --model models/ci_scaled5 --num-landmarks 5 --episodes 2
+          uv run comm/analyze_communication.py --model models/ci_scaled5 --num-landmarks 5 --episodes 2 --out /tmp/ci_scaled5.png
+          uv run comm/causal_intervention.py --model models/ci_scaled5 --num-landmarks 5 --episodes 2

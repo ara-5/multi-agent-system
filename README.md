@@ -201,6 +201,25 @@ across enough seeds to trust what it said.
 
 ## Setup
 
+Using [uv](https://docs.astral.sh/uv/) (recommended — resolves and installs
+from the committed `uv.lock`, so everyone gets the exact same dependency
+versions, not just versions satisfying the same `pyproject.toml` ranges):
+
+```bash
+uv sync --extra dev
+uv run pytest tests/
+uv run comm/train.py --out models/comm_ppo
+```
+
+`uv run <script>` runs inside the project's managed `.venv` without needing
+to activate it — every command in this README also works with `uv run`
+prefixed, if you'd rather not activate the venv directly. To add a new
+dependency: `uv add <package>` (updates `pyproject.toml` and `uv.lock`
+together, unlike hand-editing `pyproject.toml` and hoping `pip install -e .`
+re-resolves consistently).
+
+Without uv, `pip` still works the same way it always has:
+
 ```bash
 python -m venv .venv
 .venv/Scripts/activate   # Windows; use `source .venv/bin/activate` on macOS/Linux
@@ -212,8 +231,8 @@ images, install the optional extra and log in once (`wandb login`), then pass
 `--wandb` to any task's `train.py`:
 
 ```bash
-pip install -e ".[wandb]"
-python spread/train.py --wandb --wandb-project multi-agent-system
+uv sync --extra wandb
+uv run spread/train.py --wandb --wandb-project multi-agent-system
 ```
 
 ## Train: simple_spread
