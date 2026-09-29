@@ -1,1 +1,1 @@
-{"n_steps": 5000, "episodes": 200, "argmax_flip_rate": 0.649, "mean_l1_vs_zero": 0.37922350696623325, "mean_kl_vs_zero": 0.12035557151157408, "placebo_argmax_flip_rate": 0.6892}
+{"n_steps": 5000, "episodes": 200, "argmax_flip_rate": 0.649, "mean_l1_vs_zero": 0.37922350696623325, "mean_kl_vs_zero": 0.12035557151157408, "mean_l1_vs_alternatives": 0.551127151704114, "argmax_flip_rate_by_target": {"0": 62.30985915492958, "1": 64.8, "2": 67.875}, "placebo_argmax_flip_rate": 0.6892, "placebo_mean_l1": 0.6316506605417933}

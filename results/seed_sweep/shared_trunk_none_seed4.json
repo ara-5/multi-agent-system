@@ -1,0 +1,14 @@
+{
+  "policy": "shared_trunk",
+  "objective": "none",
+  "num_landmarks": 3,
+  "seed": 4,
+  "reward_mean": -21.15,
+  "reward_std": 15.23,
+  "mutual_info_pct_of_max": 2.3338971779312874,
+  "message_entropy_pct_of_max": 91.80448425878757,
+  "argmax_flip_rate_pct": 48.86,
+  "mean_l1_vs_zero": 0.15702394568407907,
+  "mean_kl_vs_zero": 0.02029991064434871,
+  "final_passive_mi_diagnostic_pct": 6.214542093665151
+}

@@ -88,10 +88,17 @@ def causal_intervention_metrics(
     metric like message<->target MI says), plus mean_l1_vs_zero and
     mean_kl_vs_zero (Eccles et al. 2019 Eq. 8 and Eq. 5's estimators, computed
     against the all-zero "message removed" counterfactual, reported as
-    metrics here rather than as training losses)."""
+    metrics here rather than as training losses), and mean_l1_vs_alternatives:
+    the mean L1 distance between the real-message movement distribution and
+    every *other* message's, averaged over all num_messages-1 alternatives at
+    each step -- a continuous companion to the binary argmax_flip_rate (two
+    conditions can have the same flip rate while differing in how far the
+    distribution actually moves when it does flip), directly comparable to
+    placebo_intervention_metrics' own mean_l1 below."""
     flips = 0
     l1s_vs_zero: list[float] = []
     kls_vs_zero: list[float] = []
+    l1s_vs_alternatives: list[float] = []
     n_steps = 0
 
     for features, real_message in feature_message_stream:
@@ -108,14 +115,19 @@ def causal_intervention_metrics(
             l1s_vs_zero.append(th.abs(real_probs - zero_probs).sum().item())
             kls_vs_zero.append(F.kl_div(zero_probs.log(), real_probs, reduction="sum").item())
 
+            step_flipped = False
+            step_l1s: list[float] = []
             for m in range(num_messages):
                 if m == real_message:
                     continue
                 alt_override = F.one_hot(th.tensor([m]), num_messages).float()
                 alt_logits = policy.movement_logits_with_message_override(features, alt_override)
-                if int(alt_logits.argmax(dim=1).item()) != real_argmax:
+                alt_probs = F.softmax(alt_logits, dim=1)
+                step_l1s.append(th.abs(real_probs - alt_probs).sum().item())
+                if not step_flipped and int(alt_logits.argmax(dim=1).item()) != real_argmax:
                     flips += 1
-                    break
+                    step_flipped = True
+            l1s_vs_alternatives.append(float(np.mean(step_l1s)))
         n_steps += 1
 
     if n_steps == 0:
@@ -126,6 +138,31 @@ def causal_intervention_metrics(
         "argmax_flip_rate": flips / n_steps,
         "mean_l1_vs_zero": float(np.mean(l1s_vs_zero)),
         "mean_kl_vs_zero": float(np.mean(kls_vs_zero)),
+        "mean_l1_vs_alternatives": float(np.mean(l1s_vs_alternatives)),
+    }
+
+
+def causal_intervention_metrics_by_target(
+    policy: CommChannelPolicy,
+    feature_message_target_stream: Iterable[tuple[th.Tensor, int, int]],
+    num_messages: int,
+) -> dict[int, dict]:
+    """Breaks causal_intervention_metrics' argmax_flip_rate down by the true
+    target at each step, instead of pooling every step together. Why this
+    matters: a pooled flip rate can hide heterogeneity -- e.g. a protocol that
+    is causally load-bearing for two targets and not the third would report
+    the same pooled number as one that's uniformly, moderately load-bearing
+    for all three, and only the per-target breakdown distinguishes them.
+
+    `feature_message_target_stream` yields (features, real_message, target)
+    triples. Returns {target: {n_steps, argmax_flip_rate}}."""
+    steps_by_target: dict[int, list[tuple[th.Tensor, int]]] = {}
+    for features, real_message, target in feature_message_target_stream:
+        steps_by_target.setdefault(target, []).append((features, real_message))
+
+    return {
+        target: causal_intervention_metrics(policy, steps, num_messages)
+        for target, steps in steps_by_target.items()
     }
 
 
@@ -160,8 +197,15 @@ def placebo_intervention_metrics(
     real_slice_value is the actual value (shape [1, slice_end-slice_start])
     of the slice being perturbed at that step. Tries two alternatives per
     step -- zeroed and negated -- matching the spirit of
-    causal_intervention_metrics trying every alternative message."""
+    causal_intervention_metrics trying every alternative message.
+
+    Also returns mean_l1: the mean L1 distance between the real-slice movement
+    distribution and its two alternatives, the placebo-condition counterpart
+    to causal_intervention_metrics' mean_l1_vs_alternatives -- comparing the
+    two directly is a continuous effect-size alongside the two conditions'
+    binary flip rates."""
     flips = 0
+    l1s: list[float] = []
     n_steps = 0
 
     for features, real_slice_value in feature_slice_stream:
@@ -169,18 +213,24 @@ def placebo_intervention_metrics(
             real_logits = policy.movement_logits_with_slice_override(
                 features, slice_start, slice_end, real_slice_value
             )
+            real_probs = F.softmax(real_logits, dim=1)
             real_argmax = int(real_logits.argmax(dim=1).item())
 
+            step_flipped = False
+            step_l1s: list[float] = []
             for alt_value in (th.zeros_like(real_slice_value), -real_slice_value):
                 alt_logits = policy.movement_logits_with_slice_override(
                     features, slice_start, slice_end, alt_value
                 )
-                if int(alt_logits.argmax(dim=1).item()) != real_argmax:
+                alt_probs = F.softmax(alt_logits, dim=1)
+                step_l1s.append(th.abs(real_probs - alt_probs).sum().item())
+                if not step_flipped and int(alt_logits.argmax(dim=1).item()) != real_argmax:
                     flips += 1
-                    break
+                    step_flipped = True
+            l1s.append(float(np.mean(step_l1s)))
         n_steps += 1
 
     if n_steps == 0:
         raise ValueError("feature_slice_stream yielded no steps")
 
-    return {"n_steps": n_steps, "argmax_flip_rate": flips / n_steps}
+    return {"n_steps": n_steps, "argmax_flip_rate": flips / n_steps, "mean_l1": float(np.mean(l1s))}

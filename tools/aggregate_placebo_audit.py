@@ -72,6 +72,13 @@ def main():
             "placebo_flip_pct": placebo_flip,
             "signal_pct": message_flip - placebo_flip,
         }
+        if "mean_l1_vs_alternatives" in data and "placebo_mean_l1" in data:
+            record["action_distance_signal"] = data["mean_l1_vs_alternatives"] - data["placebo_mean_l1"]
+        if "argmax_flip_rate_by_target" in data:
+            # argmax_flip_rate_by_target's values are already percentages (comm/causal_intervention.py
+            # multiplies by 100 before writing them) -- no second '* 100' here.
+            by_target_pcts = list(data["argmax_flip_rate_by_target"].values())
+            record["by_target_range_pp"] = max(by_target_pcts) - min(by_target_pcts)
         by_condition.setdefault((match["policy"], match["objective"]), []).append(record)
 
     if not by_condition:
@@ -94,6 +101,20 @@ def main():
             "CI includes 0 -- not distinguishable from placebo noise"
         )
         print(f"  message-specific signal (message - placebo), pp: mean={m:6.2f}  95% CI=[{lo:6.2f}, {hi:6.2f}]  -- {sig_note}")
+
+        if all("action_distance_signal" in r for r in runs):
+            dist_signal = np.array([r["action_distance_signal"] for r in runs])
+            dm, dlo, dhi = bootstrap_ci(dist_signal)
+            dist_note = "message ABOVE placebo (real)" if dlo > 0 else (
+                "message BELOW placebo (suspicious)" if dhi < 0 else "CI includes 0"
+            )
+            print(f"  action-distance signal (mean L1 vs. alternatives, message - placebo): "
+                  f"mean={dm:6.4f}  95% CI=[{dlo:6.4f}, {dhi:6.4f}]  -- {dist_note}")
+        if all("by_target_range_pp" in r for r in runs):
+            by_target_range = np.array([r["by_target_range_pp"] for r in runs])
+            print(f"  target-conditioned flip-rate heterogeneity (max-min across targets), pp: "
+                  f"mean={by_target_range.mean():6.2f}  (per-seed: "
+                  f"{', '.join(f'{v:.1f}' for v in sorted(by_target_range))})")
 
     print("\n" + "=" * 100)
     print("Pairwise comparisons on message-specific signal")

@@ -25,6 +25,9 @@ def main():
     parser.add_argument("--out-dir", default="results/seed_sweep")
     parser.add_argument("--episodes", type=int, default=200)
     parser.add_argument("--base-seed", type=int, default=10_000)
+    parser.add_argument("--skip-existing", action="store_true",
+                         help="Skip a model if its output JSON already has a 'mean_l1_vs_alternatives' field -- "
+                              "for resuming a sweep in bounded batches instead of one long-running process.")
     args = parser.parse_args()
 
     models_dir = Path(args.models_dir)
@@ -33,6 +36,12 @@ def main():
     for model_path in sorted(models_dir.glob("*.zip")):
         label = model_path.stem
         out_json = out_dir / f"{label}_causal_placebo.json"
+        if args.skip_existing and out_json.exists():
+            with open(out_json) as f:
+                existing = json.load(f)
+            if "mean_l1_vs_alternatives" in existing and existing.get("episodes") == args.episodes:
+                print(f"- {label} (already up to date, skipping)")
+                continue
         print(f"+ {label}")
         subprocess.run([
             sys.executable, "comm/causal_intervention.py",

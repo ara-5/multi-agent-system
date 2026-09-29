@@ -1,0 +1,1 @@
+{"confusion": [[26, 42, 21], [30, 56, 17], [36, 65, 7]], "mutual_info_bits": 0.029932444306983486, "max_mutual_info_bits": 1.584962500721156, "message_entropy_bits": 1.4116727623857321, "max_message_entropy_bits": 1.584962500721156, "episodes": 300}

@@ -67,7 +67,11 @@ from mpe2 import simple_speaker_listener_v4
 from stable_baselines3 import PPO
 from stable_baselines3.common.utils import obs_as_tensor
 
-from common.comm_audit import causal_intervention_metrics, placebo_intervention_metrics
+from common.comm_audit import (
+    causal_intervention_metrics,
+    causal_intervention_metrics_by_target,
+    placebo_intervention_metrics,
+)
 from common.joint_env import JointPolicyEnv
 from common.scaled_speaker_listener import parallel_env as scaled_parallel_env
 
@@ -84,6 +88,25 @@ def _feature_message_stream(env, model, episodes: int, base_seed: int):
             features = policy.extract_features(obs_tensor)
             action, _ = model.predict(obs, deterministic=True)
             yield features, int(action[0])
+            obs, _reward, terminated, truncated, _info = env.step(action)
+
+
+def _feature_message_target_stream(env, model, episodes: int, base_seed: int, speaker_dim: int):
+    # The target is recoverable from the speaker's own observation slice without any extra
+    # plumbing: SB3's default feature extractor for a Box obs space is FlattenExtractor (identity
+    # flatten), so `features` here is just the raw observation -- the same
+    # argmax(obs[:speaker_dim]) analyze_communication.py uses to read the true target off the
+    # speaker's one-hot(-ish) observation.
+    policy = model.policy
+    for episode in range(episodes):
+        obs, _info = env.reset(seed=base_seed + episode)
+        terminated = truncated = False
+        while not (terminated or truncated):
+            obs_tensor = obs_as_tensor(np.expand_dims(obs, 0), policy.device)
+            features = policy.extract_features(obs_tensor)
+            target = int(features[0, :speaker_dim].argmax().item())
+            action, _ = model.predict(obs, deterministic=True)
+            yield features, int(action[0]), target
             obs, _reward, terminated, truncated, _info = env.step(action)
 
 
@@ -136,6 +159,9 @@ def main():
     stream = _feature_message_stream(env, model, args.episodes, args.base_seed)
     metrics = causal_intervention_metrics(policy, stream, num_messages)
 
+    by_target_stream = _feature_message_target_stream(env, model, args.episodes, args.base_seed, speaker_dim)
+    by_target = causal_intervention_metrics_by_target(policy, by_target_stream, num_messages)
+
     placebo_supported = hasattr(policy, "movement_logits_with_slice_override")
     if placebo_supported:
         slice_stream = _feature_slice_stream(
@@ -148,18 +174,29 @@ def main():
     argmax_flip_rate = metrics["argmax_flip_rate"]
     mean_l1_vs_zero = metrics["mean_l1_vs_zero"]
     mean_kl_vs_zero = metrics["mean_kl_vs_zero"]
+    mean_l1_vs_alternatives = metrics["mean_l1_vs_alternatives"]
 
     print(f"Steps evaluated: {n_steps} (across {args.episodes} held-out episodes, disjoint seeds from "
           "analyze_communication.py)")
     print(f"Argmax-flip rate: {argmax_flip_rate * 100:.1f}% of steps -- fraction where forcing some *other* "
           "message than the one actually sent changes the listener's greedy movement action. Near 0% means "
           "movement doesn't causally depend on which message was sent, no matter how high MI(target; message) is.")
+    by_target_rates = {t: m["argmax_flip_rate"] * 100 for t, m in sorted(by_target.items())}
+    print("Argmax-flip rate by true target: " +
+          ", ".join(f"target {t}={r:.1f}%" for t, r in by_target_rates.items()) +
+          f" -- range={max(by_target_rates.values()) - min(by_target_rates.values()):.1f}pp "
+          "(a wide range means the causal effect is heterogeneous across targets, not uniform).")
     print(f"Mean L1(real vs. zero-message) movement-distribution distance: {mean_l1_vs_zero:.4f} "
           f"(max possible: 2.0) -- Eccles et al. 2019 Eq. 8's quantity, reported as a metric here.")
     print(f"Mean KL(real || zero-message) movement distribution: {mean_kl_vs_zero:.4f} nats -- Eq. 5's CIC estimator.")
+    print(f"Mean L1(real vs. every alternative message) movement-distribution distance: "
+          f"{mean_l1_vs_alternatives:.4f} -- a continuous companion to argmax_flip_rate (how far the "
+          "distribution moves, not just whether the argmax changes); compare directly against the placebo's "
+          "mean_l1 below.")
 
     if placebo_supported:
         placebo_flip_rate = placebo_metrics["argmax_flip_rate"]
+        placebo_mean_l1 = placebo_metrics["mean_l1"]
         print(f"Placebo (velocity-slice) flip rate: {placebo_flip_rate * 100:.1f}% of steps -- the SAME "
               "intervention procedure applied to the listener's own velocity instead of the message. If this is "
               "close to the message flip rate above, the message result mostly reflects general policy "
@@ -167,6 +204,8 @@ def main():
               "docstring.")
         print(f"Message-specific signal (message flip rate minus placebo flip rate): "
               f"{(argmax_flip_rate - placebo_flip_rate) * 100:+.1f} percentage points.")
+        print(f"Placebo mean L1 distance: {placebo_mean_l1:.4f} vs. message's {mean_l1_vs_alternatives:.4f} "
+              f"-- message-specific action-distance signal: {mean_l1_vs_alternatives - placebo_mean_l1:+.4f}.")
 
     if args.json_out:
         output = {
@@ -175,9 +214,12 @@ def main():
             "argmax_flip_rate": argmax_flip_rate,
             "mean_l1_vs_zero": mean_l1_vs_zero,
             "mean_kl_vs_zero": mean_kl_vs_zero,
+            "mean_l1_vs_alternatives": mean_l1_vs_alternatives,
+            "argmax_flip_rate_by_target": by_target_rates,
         }
         if placebo_supported:
             output["placebo_argmax_flip_rate"] = placebo_metrics["argmax_flip_rate"]
+            output["placebo_mean_l1"] = placebo_metrics["mean_l1"]
         with open(args.json_out, "w") as f:
             json.dump(output, f)
         print(f"Saved analysis JSON to {args.json_out}")

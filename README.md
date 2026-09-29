@@ -5,6 +5,12 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 [![Live demo](https://img.shields.io/badge/demo-live%20in--browser-e3a54c.svg)](https://claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff)
 
+**[Read the technical report →](PAPER.md)** A standalone, self-contained
+write-up of every experiment below (verification methodology, all six
+ablation parts, and the LLM-agent pilot), with abstract, related work, and
+full references — if you only read one document in this repo, make it that
+one.
+
 **[Try the live demo →](https://claude.ai/code/artifact/43ff9a43-2bfe-4ba7-9bbb-c12a43275fff)**
 Three trained policies running *live inference in your browser* — the actual
 exported neural network weights, not a recorded video — with a real-time check
@@ -681,8 +687,17 @@ Limitations below. Full methodology: `tools/run_seed_sweep.py`,
 | bottleneck | entropy | 38.8% | [19.0, 58.6] |
 | bottleneck | mi | **99.7%** | [99.7, 99.7] |
 | bottleneck | eccles | 86.0% | [72.3, 99.7] |
+| shared_trunk | none | **1.8%** | [0.9, 2.7] |
 | shared_trunk | mi | **1.1%** | [0.4, 2.1] |
 | shared_trunk | eccles | **1.0%** | [0.5, 1.6] |
+
+The `shared_trunk/none` row completes the most direct four-way comparison
+(shared network vs. bottleneck vs. bottleneck+entropy vs. bottleneck+MI) in
+one place: a plain shared network with no communication-specific loss at all
+already sits at MI indistinguishable from `shared_trunk`'s other two
+conditions (1.8% vs. 1.1%/1.0%) — the architecture alone determines the
+correlational-MI ceiling regardless of which objective, if any, is layered on
+top of it.
 
 The predicted result (mi_ppo.py's and eccles_ppo.py's docstrings) was that a
 channel-only auxiliary loss might inflate *correlational* MI even without the
@@ -717,10 +732,40 @@ signal** (message flip-rate minus placebo flip-rate):
 | bottleneck | entropy | 8.7 | [0.4, 17.7] | Barely |
 | bottleneck | mi | 8.8 | [3.2, 16.2] | Yes |
 | bottleneck | eccles | 29.9 | [9.9, 47.3] | Yes |
+| shared_trunk | none | 16.3 | [-2.2, 37.1] | No |
 | shared_trunk | mi | 20.3 | [12.7, 27.8] | Yes |
 | shared_trunk | eccles | 43.9 | [26.1, 63.7] | Yes |
 
-Two things here, and the second is the one we didn't expect:
+**A continuous companion metric, and where it disagrees with the binary one.**
+`argmax_flip_rate` only asks *whether* the greedy action changes; it can't
+distinguish a knife-edge flip from a decisive one. `comm/causal_intervention.py`
+also reports the mean L1 distance between the real-message movement
+distribution and every alternative's, run through the identical
+message-vs-placebo comparison (an **action-distance signal**, the placebo's
+own equivalent computed from its two alternatives). Where the flip-rate
+signal is large, the action-distance signal agrees closely: `bottleneck/eccles`
+(0.540, 95% CI [0.25, 0.88]), `shared_trunk/eccles` (0.620, [0.40, 0.93]), and
+`shared_trunk/mi` (0.169, [0.11, 0.24]) are all clearly above placebo on both
+metrics. But **`bottleneck/mi`'s two metrics disagree**: its flip-rate signal
+is significant (8.8pp, [3.2, 16.2]) while its action-distance signal is not
+(0.075, 95% CI [-0.024, 0.213] — includes 0). The likely explanation is
+statistical power, not contradiction: L1 distance averages over *every*
+alternative message at each step, which dilutes a signal driven by only one
+or two close-call flips, while the flip-rate metric only needs any single
+alternative to flip. The two metrics agree at the extremes (strong effect,
+no effect) and diverge in the middle — which is itself informative about
+effect structure, not just noise.
+
+**Target-conditioned heterogeneity is modest everywhere.** Breaking the flip
+rate down by the true target and taking the max-min range across the three
+targets gives a mean of 3.4–12.8pp across conditions (full breakdown:
+`comm/causal_intervention.py`'s `--json-out` field
+`argmax_flip_rate_by_target`) — small relative to the 0–100pp scale, meaning
+no condition's placebo-corrected signal is being driven by one anomalous
+target while the other two show nothing; the causal effect is broadly shared
+across targets, not concentrated.
+
+Three things here, and the second is the one we didn't expect:
 
 **(a) Eccles' loss produces the strongest placebo-corrected causal signal of
 any bottleneck condition (29.9pp)** — which makes complete sense in
@@ -749,6 +794,20 @@ channel can be causally "used" by a receiver without carrying real
 task-relevant information, which is a distinct — and arguably more
 deceptive, since it survives a causal check — failure mode from the one Lowe
 et al. 2019 describe for purely correlational metrics.
+
+**(c) That failure mode isn't just "any `shared_trunk` network looks like
+this" — `shared_trunk/none`'s signal (16.3pp) is *not* distinguishable from
+placebo (95% CI=[-2.2, 37.1]), unlike `shared_trunk/mi` and
+`shared_trunk/eccles`.** The point estimate sits between the two significant
+conditions, and 6 seeds isn't enough to rule out a real effect here either —
+but as measured, the "causally load-bearing but uninformative" effect shows
+up specifically alongside an auxiliary loss pushing on the channel (even one
+that fails to make it informative), not in the plain PPO-only shared-network
+baseline. That's consistent with (b)'s proposed mechanism: the auxiliary
+loss's gradient still reaches the message-adjacent columns of the shared
+trunk enough to entangle them further with the movement columns, even though
+it can't overcome the trunk's much larger policy-gradient/value-loss
+gradient enough to make the *message itself* informative (Part 1).
 
 ### Part 3 — vocabulary scaling (bottleneck architecture, entropy vs. MI loss, 4 seeds)
 

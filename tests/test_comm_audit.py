@@ -3,7 +3,11 @@ fake policies instead of a real trained model -- the same style as
 test_joint_env.py's FakeCoopEnv."""
 import torch as th
 
-from common.comm_audit import causal_intervention_metrics, message_mutual_info_estimate
+from common.comm_audit import (
+    causal_intervention_metrics,
+    causal_intervention_metrics_by_target,
+    message_mutual_info_estimate,
+)
 
 
 def test_message_mutual_info_estimate_is_near_zero_for_a_degenerate_speaker():
@@ -69,3 +73,34 @@ def test_causal_intervention_metrics_reports_n_steps():
     stream = [(th.zeros(1, 4), 0) for _ in range(5)]
     metrics = causal_intervention_metrics(policy, stream, num_messages=3)
     assert metrics["n_steps"] == 5
+
+
+def test_mean_l1_vs_alternatives_is_zero_when_receiver_ignores_message():
+    policy = _FakePolicyNoListening()
+    stream = [(th.zeros(1, 4), message) for message in (0, 1, 2, 0, 1, 2)]
+    metrics = causal_intervention_metrics(policy, stream, num_messages=3)
+    assert metrics["mean_l1_vs_alternatives"] == 0.0
+
+
+def test_mean_l1_vs_alternatives_is_positive_when_receiver_tracks_message():
+    policy = _FakePolicyRealListening()
+    stream = [(th.zeros(1, 4), message) for message in (0, 1, 2, 0, 1, 2)]
+    metrics = causal_intervention_metrics(policy, stream, num_messages=3)
+    assert metrics["mean_l1_vs_alternatives"] > 0.0
+
+
+def test_causal_intervention_metrics_by_target_buckets_correctly():
+    policy = _FakePolicyRealListening()
+    # 2 steps at target 0 (message tracks target, so always flips against the other 2
+    # alternatives), 1 step at target 1 with a message that equals the target too.
+    stream = [
+        (th.zeros(1, 4), 0, 0),
+        (th.zeros(1, 4), 0, 0),
+        (th.zeros(1, 4), 1, 1),
+    ]
+    by_target = causal_intervention_metrics_by_target(policy, stream, num_messages=3)
+    assert set(by_target.keys()) == {0, 1}
+    assert by_target[0]["n_steps"] == 2
+    assert by_target[1]["n_steps"] == 1
+    assert by_target[0]["argmax_flip_rate"] == 1.0
+    assert by_target[1]["argmax_flip_rate"] == 1.0
