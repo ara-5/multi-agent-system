@@ -1,0 +1,20 @@
+[
+  {
+    "scale": 1.0,
+    "reward_mean": -12.62,
+    "random_reward_mean": -32.05,
+    "relative_improvement_pct": 60.62402496099845
+  },
+  {
+    "scale": 1.5,
+    "reward_mean": -29.91,
+    "random_reward_mean": -75.06,
+    "relative_improvement_pct": 60.15187849720225
+  },
+  {
+    "scale": 2.0,
+    "reward_mean": -56.96,
+    "random_reward_mean": -120.38,
+    "relative_improvement_pct": 52.68316996178767
+  }
+]

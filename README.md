@@ -667,8 +667,11 @@ actually study), not a validated result on its own.
 elsewhere in this README, chosen to fit a same-day compute window; see
 Limitations below. Full methodology: `tools/run_seed_sweep.py`,
 `tools/aggregate_seed_sweep.py`, `tools/placebo_audit_sweep.py`,
-`tools/aggregate_placebo_audit.py`. Raw per-seed data:
-`results/seed_sweep/`, `results/vocab_sweep_n*/`.)*
+`tools/aggregate_placebo_audit.py`, `tools/run_noise_sweep.py`,
+`tools/aggregate_noise_sweep.py`, `tools/run_generalization_sweep.py`,
+`tools/aggregate_generalization_sweep.py`. Raw per-seed data:
+`results/seed_sweep/`, `results/vocab_sweep_n*/`, `results/noise_sweep/`,
+`results/generalization_sweep/`.)*
 
 ### Part 1 — correlational MI: the architecture is doing essentially all the work
 
@@ -779,8 +782,98 @@ and (per Part 2) a channel scoring near-zero on this diagnostic can still be
 causally "listened to" for reasons that have nothing to do with successful
 communication.
 
+### Part 5 — noise robustness: does the protocol survive a lossy channel?
+
+Every result above evaluates the message channel exactly as trained — clean
+transmission. `comm/noise_robustness.py` instead corrupts the speaker's
+transmitted message independently at every step with probability p (replacing
+it with a uniformly random *different* message before the environment
+advances — exactly what a lossy channel does to a transmitted symbol), for
+p ∈ {0, 5, 10, 20, 30}%, across the same 6 seeds per condition as Parts 1–2.
+
+**Reward barely moves at any noise level, for any condition** (e.g.
+`bottleneck/mi`: −19.01 at 0% noise vs. −18.91 at 30%) — this task's reward is
+distance-based and integrated over 25 steps, so a fraction of corrupted steps
+gets averaged out rather than compounding into failure. Reward turns out to
+be an insensitive metric for this question; the informative one is
+**decision_flip_rate**: of the steps where a corruption event happened, the
+fraction where it actually changed the listener's greedy movement action
+(reusing the same `movement_logits_with_message_override` hook Part 2's
+causal audit uses, applied to "message as intended" vs. "message as
+corrupted"):
+
+| Condition | Decision flip-rate @ 30% noise (95% CI) |
+| --- | --- |
+| bottleneck / none | 50.3% [40.9, 58.8] |
+| bottleneck / entropy | 48.6% [39.0, 59.6] |
+| bottleneck / mi | 46.1% [38.9, 54.3] |
+| bottleneck / eccles | 62.9% [52.2, 74.3] |
+| shared_trunk / mi | 54.2% [47.9, 61.1] |
+| shared_trunk / eccles | 58.8% [47.1, 73.7] |
+
+Only one pairwise comparison reaches significance: **`bottleneck/eccles` is
+reliably more decision-fragile under corruption than `bottleneck/mi`**
+(diff=16.76pp, 95% CI=[2.97, 30.13], p=0.015), despite `eccles` scoring the
+*highest* placebo-corrected causal signal in Part 2 (+29.9pp) and `mi`
+scoring the highest raw MI (99.7%). Read together: the two objectives produce
+protocols with different failure profiles rather than one strictly
+dominating — `eccles` is more strongly, causally relied-upon when the message
+is clean, but that reliance is also more brittle to per-instance corruption;
+`mi`'s protocol is comparatively more redundant/stable under noise. Every
+other pairwise comparison (architecture-vs-architecture, objective-vs-none)
+has a CI crossing zero — not distinguishable given this seed budget.
+
+### Part 6 — spatial generalization: does the movement policy hold up outside the training distribution?
+
+The message protocol itself can't be tested for spatial generalization at
+all: the speaker's observation here is a one-hot of landmark *identity*, not
+a position, so it's scale-invariant by construction. What can generalize or
+fail is the *listener's* movement policy, which does condition on relative
+positions. `comm/evaluate.py --position-scale` widens the reset position box
+past the uniform(−1,+1) range training used; tested at 1.0× (training
+distribution), 1.5×, and 2.0×, on `bottleneck/{entropy,mi}` (4 seeds each, on
+the `ScaledScenario` variant used for the vocabulary-scaling experiment,
+since `--position-scale` only works through that env — see Limitations).
+
+Raw reward isn't comparable across scales (distance-based reward gets
+mechanically larger for *any* policy, including random, as the box widens),
+so this reports reward relative to a random-policy baseline evaluated at the
+same scale:
+
+| Scale | mi: rel. improvement over random | entropy: rel. improvement over random |
+| --- | --- | --- |
+| 1.0× (training) | 60.5% [59.2, 61.4] | 58.8% [58.3, 59.4] |
+| 1.5× | 59.7% [58.9, 60.1] | 58.8% [57.4, 59.7] |
+| 2.0× | 52.4% [51.3, 53.0] | 52.1% [50.6, 53.0] |
+
+Both conditions retain roughly **90% of their relative advantage** at 2× the
+training range — real but graceful degradation, not collapse. `mi` is
+marginally ahead of `entropy` at the training distribution (+1.7pp,
+p=0.017) but the two are statistically indistinguishable at 1.5×/2.0×
+(p=0.19, p=0.76) — the communication objective doesn't detectably change how
+well the movement policy generalizes spatially, consistent with the message
+itself carrying no positional information to generalize in the first place.
+
 ### Limitations
 
+- **Parts 5–6 share Parts 1–2's seed-budget caveat below.**
+- **Part 5's decision_flip_rate inherits Part 2's architecture-comparability
+  caveat**: it's computed via the same `movement_logits_with_message_override`
+  hook, so `shared_trunk` numbers answer "does this change the joint
+  network's output" rather than an isolated listener sub-network's, same as
+  Part 2.
+- **Part 5's reward-insensitivity finding is a property of this task's dense,
+  repeated-correction reward structure**, not a general claim about
+  noise-robustness methodology — a sparser or single-shot-outcome task would
+  likely show reward degradation directly; here it doesn't, which is itself
+  the point of reporting decision_flip_rate as the primary metric instead.
+- **Part 6 only covers `bottleneck/{entropy,mi}`**, not `eccles` or
+  `shared_trunk`, and runs on the `ScaledScenario` env variant (one-hot
+  speaker observation) rather than the main sweep's stock env — chosen
+  because `--position-scale` needed that variant's already-parameterized
+  reset logic, not because the other conditions were expected to differ.
+  Extending this table to the full 6-condition sweep on a stock-env
+  equivalent is straightforward but wasn't done here.
 - **6 seeds and a 120k-step budget** (vs. this README's other results at
   300k) were chosen to fit a same-day compute window on a single 12-core CPU
   machine, not because 6 is an adequate seed count — Colas et al. 2018

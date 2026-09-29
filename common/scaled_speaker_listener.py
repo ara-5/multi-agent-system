@@ -57,8 +57,19 @@ def _distinguishable_colors(n: int) -> list[np.ndarray]:
 
 
 class ScaledScenario(Scenario):
-    def __init__(self, num_landmarks: int) -> None:
+    def __init__(self, num_landmarks: int, position_scale: float = 1.0) -> None:
         self.num_landmarks = num_landmarks
+        # Stock mpe2 hardcodes the reset position range to uniform(-1, +1); this
+        # lets an eval-time caller widen it past whatever range the policy was
+        # trained under, for the "does the movement policy generalize to
+        # landmark/agent positions further apart than it ever saw in training"
+        # experiment -- note this can only affect the *listener's* movement
+        # decision, not the message: the speaker's observation here is a
+        # one-hot of landmark identity (see module docstring), which doesn't
+        # depend on position at all, so message<->target mutual information is
+        # unaffected by position_scale by construction. Only reward/movement
+        # metrics are informative about this axis.
+        self.position_scale = position_scale
 
     def make_world(self) -> ExtendedWorld:
         world = ExtendedWorld()
@@ -93,11 +104,11 @@ class ScaledScenario(Scenario):
             landmark.color = colors[i]
         world.agents[0].goal_a.color = world.agents[0].goal_b.color + np.array([0.45, 0.45, 0.45])
         for agent in world.agents:
-            agent.state.p_pos = np_random.uniform(-1, +1, world.dim_p)
+            agent.state.p_pos = np_random.uniform(-self.position_scale, +self.position_scale, world.dim_p)
             agent.state.p_vel = np.zeros(world.dim_p)
             agent.state.c = np.zeros(world.dim_c)
         for landmark in world.landmarks:
-            landmark.state.p_pos = np_random.uniform(-1, +1, world.dim_p)
+            landmark.state.p_pos = np_random.uniform(-self.position_scale, +self.position_scale, world.dim_p)
             landmark.state.p_vel = np.zeros(world.dim_p)
 
     def observation(self, agent: ExtendedAgent, world: ExtendedWorld) -> np.ndarray:
@@ -123,17 +134,18 @@ class raw_env(SimpleEnv, EzPickle):
     def __init__(
         self,
         num_landmarks: int = 3,
+        position_scale: float = 1.0,
         max_cycles: int = 25,
         continuous_actions: bool = False,
         render_mode: str | None = None,
         dynamic_rescaling: bool = True,
     ) -> None:
         EzPickle.__init__(
-            self, num_landmarks=num_landmarks, max_cycles=max_cycles,
+            self, num_landmarks=num_landmarks, position_scale=position_scale, max_cycles=max_cycles,
             continuous_actions=continuous_actions, render_mode=render_mode,
             dynamic_rescaling=dynamic_rescaling,
         )
-        scenario = ScaledScenario(num_landmarks)
+        scenario = ScaledScenario(num_landmarks, position_scale)
         world = scenario.make_world()
         SimpleEnv.__init__(
             self, scenario=scenario, world=world, render_mode=render_mode,

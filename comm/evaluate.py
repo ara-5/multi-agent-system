@@ -22,7 +22,16 @@ def main():
     parser.add_argument("--max-cycles", type=int, default=25)
     parser.add_argument("--num-landmarks", type=int, default=None,
                          help="Must match what the model was trained with -- see train_ablation.py.")
+    parser.add_argument("--position-scale", type=float, default=1.0,
+                         help="Widen the reset position range past the stock uniform(-1,+1) the model was "
+                              "trained under, to test spatial generalization -- see "
+                              "common/scaled_speaker_listener.py. Requires --num-landmarks (the stock env "
+                              "doesn't expose this).")
     args = parser.parse_args()
+
+    if args.position_scale != 1.0 and args.num_landmarks is None:
+        raise SystemExit("--position-scale requires --num-landmarks (the stock simple_speaker_listener_v4 "
+                          "env doesn't support a configurable position range).")
 
     model = PPO.load(args.model) if args.model else None
     if args.num_landmarks is None:
@@ -31,7 +40,8 @@ def main():
         )
     else:
         pz_env_fn = lambda: scaled_parallel_env(
-            num_landmarks=args.num_landmarks, max_cycles=args.max_cycles, continuous_actions=False
+            num_landmarks=args.num_landmarks, position_scale=args.position_scale,
+            max_cycles=args.max_cycles, continuous_actions=False
         )
     env = JointPolicyEnv(pz_env_fn)
 
