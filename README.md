@@ -1007,6 +1007,27 @@ itself carrying no positional information to generalize in the first place.
   rather than a one-time one; it's a rewrite of the training stack, not a
   drop-in swap, given how much of `comm/*.py` subclasses
   `stable_baselines3.common.policies.ActorCriticPolicy` directly.
+- **Held-out-target-identity generalization** (train with one landmark index
+  never used as the goal, test on that index) — considered as a literal
+  version of "generalization to unseen configurations," alongside Part 6's
+  spatial-scale version, and deliberately not attempted. Reasoning: the
+  speaker's observation here is a one-hot over landmark identity, and its
+  first layer is linear — if index *i* is always 0 in training, gradient
+  w.r.t. that input's weight column is always exactly 0 too, so that column
+  never leaves its random initialization. The held-out test would therefore
+  mostly measure "what does an untrained weight column happen to output,"
+  not anything resembling learned generalization — a foreseeable, low-signal
+  result by construction, unlike Part 6's spatial-scale test (whose outcome,
+  ~90% of relative advantage retained at 2x scale, was genuinely not
+  predictable in advance). This would become a real test only in a setting
+  where the meaning space has compositional or continuous structure for the
+  network to generalize *along* — e.g. attribute-based targets (shape +
+  color) rather than a single flat categorical index, which would also be
+  the natural setting for the topographic-similarity/compositionality
+  metrics scoped and skipped earlier in this project for the same reason
+  (see the causal-audit rigor discussion above). Revisit this together with
+  a redesigned, compositional target space, not as a standalone addition to
+  the current one.
 
 ## Reproducibility
 
